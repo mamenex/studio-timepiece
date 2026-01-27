@@ -57,6 +57,11 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        clock: {
+          led: "hsl(var(--clock-led))",
+          "led-dim": "hsl(var(--clock-led-dim))",
+          glow: "hsl(var(--clock-glow))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
