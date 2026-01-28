@@ -7,7 +7,7 @@ interface SecondsRingProps {
 
 const SecondsRing = ({ currentSecond, size = 400 }: SecondsRingProps) => {
   const dots = Array.from({ length: 60 }, (_, i) => i);
-  const radius = (size / 2) - 20;
+  const radius = (size / 2) - 15;
   const centerOffset = size / 2;
   const dotSize = size > 300 ? 8 : 6;
 

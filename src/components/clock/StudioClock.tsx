@@ -75,7 +75,7 @@ const StudioClock = () => {
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <DigitalDisplay 
               time={timeString} 
-              className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl"
+              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl"
             />
           </div>
         </div>
