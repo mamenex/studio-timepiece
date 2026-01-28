@@ -38,7 +38,7 @@
 
     /* Studio Clock specific */
     --clock-led: 0 100% 50%;
-    --clock-led-dim: 0 100% 15%;
+    --clock-led-dim: 0 100% 8%;
     --clock-glow: 0 100% 50%;
 
     --sidebar-background: 0 0% 8%;
@@ -81,7 +81,7 @@
     --ring: 0 100% 50%;
 
     --clock-led: 0 100% 50%;
-    --clock-led-dim: 0 100% 15%;
+    --clock-led-dim: 0 100% 8%;
     --clock-glow: 0 100% 50%;
 
     --sidebar-background: 0 0% 8%;
