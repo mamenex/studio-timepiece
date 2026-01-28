@@ -78,7 +78,7 @@ const StudioClock = () => {
           <img 
             src={studioLogo} 
             alt="Studio logo" 
-            className="absolute top-[18%] left-1/2 -translate-x-1/2 w-20 sm:w-24 opacity-30"
+            className="absolute top-[18%] left-1/2 -translate-x-1/2 w-28 sm:w-36 opacity-30"
           />
           
           {/* Digital Time Display - centered */}
