@@ -80,7 +80,7 @@ const StudioClock = () => {
             <img 
               src={studioLogo} 
               alt="Studio logo" 
-              className="w-16 sm:w-20 opacity-30"
+              className="w-20 sm:w-24 opacity-30 -mt-4"
             />
             <DigitalDisplay 
               time={timeString} 
