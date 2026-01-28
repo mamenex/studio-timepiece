@@ -74,14 +74,15 @@ const StudioClock = () => {
             size={Math.min(width * 0.9, 500)} 
           />
           
-          {/* Digital Time Display */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-            {/* Logo - subtle and dark */}
-            <img 
-              src={studioLogo} 
-              alt="Studio logo" 
-              className="w-20 sm:w-24 opacity-30 -mt-4"
-            />
+          {/* Logo - positioned between seconds ring and clock */}
+          <img 
+            src={studioLogo} 
+            alt="Studio logo" 
+            className="absolute top-[18%] left-1/2 -translate-x-1/2 w-20 sm:w-24 opacity-30"
+          />
+          
+          {/* Digital Time Display - centered */}
+          <div className="absolute inset-0 flex items-center justify-center">
             <DigitalDisplay 
               time={timeString} 
               className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl"
