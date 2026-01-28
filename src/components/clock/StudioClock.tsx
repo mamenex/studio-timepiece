@@ -1,15 +1,18 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
+import { sv } from "date-fns/locale";
 import { useWindowSize } from "@/hooks/useWindowSize";
-import { Maximize, Minimize } from "lucide-react";
+import { Maximize, Minimize, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SecondsRing from "./SecondsRing";
 import DigitalDisplay from "./DigitalDisplay";
 import Stopwatch from "./Stopwatch";
+import studioLogo from "@/assets/studio-logo.png";
 
 const StudioClock = () => {
   const [time, setTime] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showStopwatch, setShowStopwatch] = useState(false);
   const { width } = useWindowSize();
 
   useEffect(() => {
@@ -42,7 +45,7 @@ const StudioClock = () => {
   };
 
   const timeString = format(time, "HH:mm:ss");
-  const dateString = format(time, "EEEE, d MMMM yyyy");
+  const dateString = format(time, "EEEE, d MMMM yyyy", { locale: sv });
   const currentSecond = time.getSeconds();
 
   return (
@@ -72,7 +75,13 @@ const StudioClock = () => {
           />
           
           {/* Digital Time Display */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+            {/* Logo - subtle and dark */}
+            <img 
+              src={studioLogo} 
+              alt="Studio logo" 
+              className="w-16 sm:w-20 opacity-30"
+            />
             <DigitalDisplay 
               time={timeString} 
               className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl"
@@ -88,13 +97,23 @@ const StudioClock = () => {
         {/* Divider */}
         <div className="w-48 h-px bg-border" />
 
-        {/* Stopwatch */}
-        <div className="flex flex-col items-center gap-2">
-          <h2 className="text-muted-foreground text-sm uppercase tracking-widest">
-            Stopwatch
-          </h2>
-          <Stopwatch />
-        </div>
+        {/* Stopwatch Toggle Button */}
+        <Button
+          onClick={() => setShowStopwatch(!showStopwatch)}
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-primary hover:bg-secondary"
+          title={showStopwatch ? "Hide stopwatch" : "Show stopwatch"}
+        >
+          <Timer className="h-5 w-5" />
+        </Button>
+
+        {/* Stopwatch (hidden by default) */}
+        {showStopwatch && (
+          <div className="flex flex-col items-center gap-2">
+            <Stopwatch />
+          </div>
+        )}
       </div>
     </div>
   );
