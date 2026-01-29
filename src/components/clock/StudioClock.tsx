@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useWindowSize } from "@/hooks/useWindowSize";
-import { Maximize, Minimize, Timer } from "lucide-react";
+import { Maximize, Minimize, Timer, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SecondsRing from "./SecondsRing";
 import DigitalDisplay from "./DigitalDisplay";
@@ -13,6 +13,7 @@ const StudioClock = () => {
   const [time, setTime] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showStopwatch, setShowStopwatch] = useState(false);
+  const [showDate, setShowDate] = useState(true);
   const { width } = useWindowSize();
 
   useEffect(() => {
@@ -50,6 +51,28 @@ const StudioClock = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 sm:p-8 relative">
+      {/* Top Left Controls */}
+      <div className="absolute top-4 left-4 flex gap-2 z-10">
+        <Button
+          onClick={() => setShowDate(!showDate)}
+          variant="ghost"
+          size="icon"
+          className={`text-muted-foreground hover:text-primary hover:bg-secondary ${showDate ? 'text-primary' : ''}`}
+          title={showDate ? "Hide date" : "Show date"}
+        >
+          <Calendar className="h-5 w-5" />
+        </Button>
+        <Button
+          onClick={() => setShowStopwatch(!showStopwatch)}
+          variant="ghost"
+          size="icon"
+          className={`text-muted-foreground hover:text-primary hover:bg-secondary ${showStopwatch ? 'text-primary' : ''}`}
+          title={showStopwatch ? "Hide stopwatch" : "Show stopwatch"}
+        >
+          <Timer className="h-5 w-5" />
+        </Button>
+      </div>
+
       {/* Fullscreen Toggle */}
       <Button
         onClick={toggleFullscreen}
@@ -67,6 +90,11 @@ const StudioClock = () => {
 
       {/* Main Clock Container */}
       <div className="flex flex-col items-center gap-6 sm:gap-8">
+        {/* Title */}
+        <h1 className="text-muted-foreground text-xl sm:text-2xl md:text-3xl font-light tracking-[0.4em] uppercase">
+          Studioklocka
+        </h1>
+
         {/* Clock Face with Seconds Ring */}
         <div className="relative flex items-center justify-center" style={{ width: 'min(90vw, 500px)', height: 'min(90vw, 500px)' }}>
           <SecondsRing 
@@ -90,30 +118,19 @@ const StudioClock = () => {
           </div>
         </div>
 
-        {/* Date Display */}
-        <div className="text-muted-foreground text-lg sm:text-xl md:text-2xl font-light tracking-wide">
-          {dateString}
-        </div>
-
-        {/* Divider */}
-        <div className="w-48 h-px bg-border" />
-
-        {/* Stopwatch Toggle Button */}
-        <Button
-          onClick={() => setShowStopwatch(!showStopwatch)}
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground hover:text-primary hover:bg-secondary"
-          title={showStopwatch ? "Hide stopwatch" : "Show stopwatch"}
-        >
-          <Timer className="h-5 w-5" />
-        </Button>
-
-        {/* Stopwatch (hidden by default) */}
-        {showStopwatch && (
-          <div className="flex flex-col items-center gap-2">
-            <Stopwatch />
+        {/* Date Display (togglable) */}
+        {showDate && (
+          <div className="text-muted-foreground text-lg sm:text-xl md:text-2xl font-light tracking-wide">
+            {dateString}
           </div>
+        )}
+
+        {/* Stopwatch (togglable) */}
+        {showStopwatch && (
+          <>
+            <div className="w-48 h-px bg-border" />
+            <Stopwatch />
+          </>
         )}
       </div>
     </div>
