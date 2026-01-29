@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useWindowSize } from "@/hooks/useWindowSize";
-import { Maximize, Minimize, Timer, Calendar, Plus, Minus, Type, Image } from "lucide-react";
+import { Maximize, Minimize, Timer, Calendar, Plus, Minus, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SecondsRing from "./SecondsRing";
 import DigitalDisplay from "./DigitalDisplay";
@@ -77,10 +77,15 @@ const StudioClock = () => {
           onClick={() => setShowLogo(!showLogo)}
           variant="ghost"
           size="icon"
-          className={`text-muted-foreground hover:text-primary hover:bg-secondary ${showLogo ? 'text-primary' : ''}`}
+          className={`text-muted-foreground hover:text-primary hover:bg-secondary ${showLogo ? 'opacity-100' : 'opacity-40'}`}
           title={showLogo ? "Hide logo" : "Show logo"}
         >
-          <Image className="h-5 w-5" />
+          <img 
+            src={studioLogo} 
+            alt="Toggle logo" 
+            className="h-5 w-auto object-contain object-left"
+            style={{ clipPath: 'inset(0 50% 0 0)' }}
+          />
         </Button>
         <Button
           onClick={() => setShowDate(!showDate)}
