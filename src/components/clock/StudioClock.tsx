@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useWindowSize } from "@/hooks/useWindowSize";
-import { Maximize, Minimize, Timer, Calendar } from "lucide-react";
+import { Maximize, Minimize, Timer, Calendar, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SecondsRing from "./SecondsRing";
 import DigitalDisplay from "./DigitalDisplay";
@@ -14,6 +14,7 @@ const StudioClock = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showStopwatch, setShowStopwatch] = useState(false);
   const [showDate, setShowDate] = useState(true);
+  const [zoom, setZoom] = useState(1);
   const { width } = useWindowSize();
 
   useEffect(() => {
@@ -45,12 +46,20 @@ const StudioClock = () => {
     }
   };
 
+  const handleZoomIn = () => {
+    setZoom((prev) => Math.min(prev + 0.1, 2));
+  };
+
+  const handleZoomOut = () => {
+    setZoom((prev) => Math.max(prev - 0.1, 0.5));
+  };
+
   const timeString = format(time, "HH:mm:ss");
   const dateString = format(time, "EEEE, d MMMM yyyy", { locale: sv });
   const currentSecond = time.getSeconds();
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 sm:p-8 relative">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 sm:p-8 relative overflow-hidden">
       {/* Top Left Controls */}
       <div className="absolute top-4 left-4 flex gap-2 z-10">
         <Button
@@ -73,23 +82,48 @@ const StudioClock = () => {
         </Button>
       </div>
 
-      {/* Fullscreen Toggle */}
-      <Button
-        onClick={toggleFullscreen}
-        variant="ghost"
-        size="icon"
-        className="absolute top-4 right-4 text-muted-foreground hover:text-primary hover:bg-secondary z-10"
-        title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-      >
-        {isFullscreen ? (
-          <Minimize className="h-5 w-5" />
-        ) : (
-          <Maximize className="h-5 w-5" />
-        )}
-      </Button>
+      {/* Top Right Controls */}
+      <div className="absolute top-4 right-4 flex gap-2 z-10">
+        <Button
+          onClick={handleZoomOut}
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-primary hover:bg-secondary"
+          title="Zoom out"
+          disabled={zoom <= 0.5}
+        >
+          <Minus className="h-5 w-5" />
+        </Button>
+        <Button
+          onClick={handleZoomIn}
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-primary hover:bg-secondary"
+          title="Zoom in"
+          disabled={zoom >= 2}
+        >
+          <Plus className="h-5 w-5" />
+        </Button>
+        <Button
+          onClick={toggleFullscreen}
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-primary hover:bg-secondary"
+          title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        >
+          {isFullscreen ? (
+            <Minimize className="h-5 w-5" />
+          ) : (
+            <Maximize className="h-5 w-5" />
+          )}
+        </Button>
+      </div>
 
-      {/* Main Clock Container */}
-      <div className="flex flex-col items-center gap-6 sm:gap-8">
+      {/* Main Clock Container with Zoom */}
+      <div 
+        className="flex flex-col items-center gap-6 sm:gap-8 transition-transform duration-200"
+        style={{ transform: `scale(${zoom})` }}
+      >
         {/* Title */}
         <h1 className="text-muted-foreground text-xl sm:text-2xl md:text-3xl font-light tracking-[0.4em] uppercase">
           Studioklocka
