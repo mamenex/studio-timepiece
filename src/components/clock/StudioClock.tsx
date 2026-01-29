@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useWindowSize } from "@/hooks/useWindowSize";
-import { Maximize, Minimize, Timer, Calendar, Plus, Minus } from "lucide-react";
+import { Maximize, Minimize, Timer, Calendar, Plus, Minus, Type, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SecondsRing from "./SecondsRing";
 import DigitalDisplay from "./DigitalDisplay";
@@ -14,6 +14,8 @@ const StudioClock = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showStopwatch, setShowStopwatch] = useState(false);
   const [showDate, setShowDate] = useState(true);
+  const [showTitle, setShowTitle] = useState(true);
+  const [showLogo, setShowLogo] = useState(true);
   const [zoom, setZoom] = useState(1);
   const { width } = useWindowSize();
 
@@ -62,6 +64,24 @@ const StudioClock = () => {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 sm:p-8 relative overflow-hidden">
       {/* Top Left Controls */}
       <div className="absolute top-4 left-4 flex gap-2 z-10">
+        <Button
+          onClick={() => setShowTitle(!showTitle)}
+          variant="ghost"
+          size="icon"
+          className={`text-muted-foreground hover:text-primary hover:bg-secondary ${showTitle ? 'text-primary' : ''}`}
+          title={showTitle ? "Hide title" : "Show title"}
+        >
+          <Type className="h-5 w-5" />
+        </Button>
+        <Button
+          onClick={() => setShowLogo(!showLogo)}
+          variant="ghost"
+          size="icon"
+          className={`text-muted-foreground hover:text-primary hover:bg-secondary ${showLogo ? 'text-primary' : ''}`}
+          title={showLogo ? "Hide logo" : "Show logo"}
+        >
+          <Image className="h-5 w-5" />
+        </Button>
         <Button
           onClick={() => setShowDate(!showDate)}
           variant="ghost"
@@ -125,9 +145,11 @@ const StudioClock = () => {
         style={{ transform: `scale(${zoom})` }}
       >
         {/* Title */}
-        <h1 className="text-muted-foreground text-xl sm:text-2xl md:text-3xl font-light tracking-[0.4em] uppercase">
-          Studioklocka
-        </h1>
+        {showTitle && (
+          <h1 className="text-muted-foreground text-xl sm:text-2xl md:text-3xl font-light tracking-[0.4em] uppercase">
+            Studioklocka
+          </h1>
+        )}
 
         {/* Clock Face with Seconds Ring */}
         <div className="relative flex items-center justify-center" style={{ width: 'min(90vw, 500px)', height: 'min(90vw, 500px)' }}>
@@ -137,11 +159,13 @@ const StudioClock = () => {
           />
           
           {/* Logo - positioned between seconds ring and clock */}
-          <img 
-            src={studioLogo} 
-            alt="Studio logo" 
-            className="absolute top-[18%] left-1/2 -translate-x-1/2 w-28 sm:w-36 opacity-30"
-          />
+          {showLogo && (
+            <img 
+              src={studioLogo} 
+              alt="Studio logo" 
+              className="absolute top-[18%] left-1/2 -translate-x-1/2 w-28 sm:w-36 opacity-30"
+            />
+          )}
           
           {/* Digital Time Display - centered */}
           <div className="absolute inset-0 flex items-center justify-center">
