@@ -84,7 +84,7 @@ const StudioClock = () => {
             src={studioLogo} 
             alt="Toggle logo" 
             className="h-5 w-auto object-contain object-right"
-            style={{ clipPath: 'inset(0 0 0 40%)' }}
+            style={{ clipPath: 'inset(0 0 0 38%)' }}
           />
         </Button>
         <Button
