@@ -1,17 +1,10 @@
-import { useEffect, useState } from "react";
+import { useClock } from "@/hooks/useClock";
 import RunningOrderLayout from "@/components/clock/RunningOrderLayout";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
 
 const RunningOrder = () => {
-  const [time, setTime] = useState(new Date());
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTime(new Date());
-    }, 100);
-    return () => clearInterval(interval);
-  }, []);
+  const { now: time } = useClock();
 
   return (
     <div className="min-h-screen bg-background p-4 sm:p-8">

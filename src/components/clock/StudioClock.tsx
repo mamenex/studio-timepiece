@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useWindowSize } from "@/hooks/useWindowSize";
+import { useClock } from "@/hooks/useClock";
 import { Maximize, Minimize, Timer, Calendar, Plus, Minus, Type, Circle, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +22,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import studioLogo from "@/assets/studio-logo.png";
 
 const StudioClock = () => {
-  const [time, setTime] = useState(new Date());
+  const { now: time, source: clockSource, statusLabel, lastSync, setSource: setClockSource } = useClock();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showStopwatch, setShowStopwatch] = useState(false);
   const [showDate, setShowDate] = useState(true);
@@ -30,16 +31,8 @@ const StudioClock = () => {
   const [showSecondsRing, setShowSecondsRing] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [mode, setMode] = useState<"clock" | "running-order">("clock");
+  const [mode, setMode] = useState<"clock" | "running-order" | "settings">("clock");
   const { width } = useWindowSize();
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTime(new Date());
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -204,6 +197,16 @@ const StudioClock = () => {
             <DropdownMenuItem
               onSelect={(event) => {
                 event.preventDefault();
+                setMode("settings");
+              }}
+              className="flex items-center justify-between"
+            >
+              <span>Settings</span>
+              {mode === "settings" && <span className="text-xs text-muted-foreground">Active</span>}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
                 window.open("/running-order", "RunningOrder", "width=1280,height=720");
               }}
               className="flex items-center gap-2"
@@ -307,24 +310,49 @@ const StudioClock = () => {
 
       {mode === "clock" ? (
         <div className="flex flex-col items-center justify-center">{clockContent}</div>
-      ) : (
+      ) : mode === "running-order" ? (
         <div className="flex w-full flex-1 items-stretch justify-center gap-6 pt-16">
           <ErrorBoundary fallbackTitle="Running order error" onReset={() => setMode("clock")}>
-          <RunningOrderLayout
-            now={time}
-            persistKey="studio_timepiece_running_order_v1"
-            syncFromStorage
-            clockSlot={
-              <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur">
-                <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Clock</div>
-                <div className="mt-4 flex flex-col items-center">
-                  <DigitalDisplay time={timeString} className="text-3xl sm:text-4xl md:text-5xl" />
-                  <div className="mt-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">{dateString}</div>
+            <RunningOrderLayout
+              now={time}
+              persistKey="studio_timepiece_running_order_v1"
+              syncFromStorage
+              clockSlot={
+                <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur">
+                  <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Clock</div>
+                  <div className="mt-4 flex flex-col items-center">
+                    <DigitalDisplay time={timeString} className="text-3xl sm:text-4xl md:text-5xl" />
+                    <div className="mt-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">{dateString}</div>
+                  </div>
                 </div>
-              </div>
-            }
-          />
+              }
+            />
           </ErrorBoundary>
+        </div>
+      ) : (
+        <div className="flex w-full flex-1 items-start justify-center pt-20">
+          <div className="w-full max-w-xl rounded-xl border border-border/60 bg-card/80 p-6 shadow-sm backdrop-blur">
+            <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Settings</div>
+            <div className="mt-4 text-lg font-semibold text-foreground">Clock source</div>
+            <div className="mt-1 text-sm text-muted-foreground">{statusLabel}</div>
+            <div className="mt-4 flex flex-col gap-2">
+              <Button
+                variant={clockSource === "local" ? "default" : "outline"}
+                onClick={() => setClockSource("local")}
+              >
+                Offline computer clock
+              </Button>
+              <Button
+                variant={clockSource === "world" ? "default" : "outline"}
+                onClick={() => setClockSource("world")}
+              >
+                World clock
+              </Button>
+            </div>
+            {lastSync && (
+              <div className="mt-4 text-xs text-muted-foreground">Last sync: {format(lastSync, "HH:mm:ss")}</div>
+            )}
+          </div>
         </div>
       )}
     </div>
