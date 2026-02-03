@@ -4,6 +4,12 @@ import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import DigitalDisplay from "./DigitalDisplay";
 
 type RunningOrderSegment = {
@@ -232,6 +238,16 @@ const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: Run
     (segment) => nowSeconds >= segment.startSeconds && nowSeconds < segment.endSeconds,
   );
   const nextSegment = activeSegments.find((segment) => segment.startSeconds > nowSeconds);
+  const showStart = activeSegments[0]?.startSeconds ?? null;
+  const showEnd = activeSegments[activeSegments.length - 1]?.endSeconds ?? null;
+  const showDurationSeconds =
+    showStart != null && showEnd != null ? Math.max(0, showEnd - showStart) : 0;
+  const showProgressValue =
+    showStart != null && showEnd != null
+      ? Math.min(100, Math.max(0, ((nowSeconds - showStart) / Math.max(1, showDurationSeconds)) * 100))
+      : 0;
+  const showRemainingSeconds =
+    showEnd != null ? Math.max(0, showEnd - nowSeconds) : 0;
 
   const countdownTarget = currentSegment ? currentSegment.endSeconds : nextSegment?.startSeconds ?? null;
   const remainingSeconds = countdownTarget != null ? Math.max(0, countdownTarget - nowSeconds) : 0;
@@ -244,6 +260,28 @@ const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: Run
     setSkippedIds((prev) =>
       prev.includes(segmentId) ? prev.filter((id) => id !== segmentId) : [...prev, segmentId],
     );
+  };
+
+  const handleJumpToSegment = (segmentId: string) => {
+    const targetIndex = segments.findIndex((segment) => segment.id === segmentId);
+    if (targetIndex < 0) return;
+
+    const toSkip = segments.slice(0, targetIndex).map((segment) => segment.id);
+    setSkippedIds((prev) => {
+      const next = new Set(prev);
+      toSkip.forEach((id) => next.add(id));
+      return Array.from(next);
+    });
+  };
+
+  const handleJumpToNext = () => {
+    if (currentSegment) {
+      handleToggleSkip(currentSegment.id);
+      return;
+    }
+    if (nextSegment) {
+      handleToggleSkip(nextSegment.id);
+    }
   };
 
   const handleSetShowStartNow = () => {
@@ -284,8 +322,14 @@ const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: Run
                     event.currentTarget.value = "";
                   }}
                 />
-                <span className="rounded-md border border-border/60 px-3 py-2 text-sm hover:bg-accent">
-                  Load Excel
+                <span
+                  className={`rounded-md px-3 py-2 text-sm font-medium shadow-sm transition ${
+                    sourceName
+                      ? "border border-emerald-400 bg-black text-emerald-300 hover:text-emerald-200"
+                      : "bg-emerald-500 text-emerald-50 hover:bg-emerald-600"
+                  }`}
+                >
+                  {sourceName ? "Excel loaded" : "Load Excel"}
                 </span>
               </label>
               <Button variant="outline" size="sm" onClick={() => setSkippedIds([])}>
@@ -331,37 +375,53 @@ const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: Run
                 {effectiveSegments.map((segment) => {
                   const isCurrent = currentSegment?.id === segment.id;
                   return (
-                    <div
-                      key={segment.id}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        handleToggleSkip(segment.id);
-                      }}
-                      className={`rounded-lg border px-4 py-3 transition ${
-                        isCurrent
-                          ? "border-primary/60 bg-primary/10"
-                          : "border-border/60 bg-background/80 hover:bg-accent/40"
-                      } ${segment.isSkipped ? "opacity-50" : ""}`}
-                      title="Right click to skip"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <div className="text-sm text-muted-foreground">Segment {segment.segmentNumber}</div>
-                          <div className="text-lg font-semibold text-foreground">
-                            {segment.type || "Untitled segment"}
+                    <ContextMenu key={segment.id}>
+                      <ContextMenuTrigger asChild>
+                        <div
+                          className={`rounded-lg border px-4 py-3 transition ${
+                            isCurrent
+                              ? "border-primary/60 bg-primary/10"
+                              : "border-border/60 bg-background/80 hover:bg-accent/40"
+                          } ${segment.isSkipped ? "opacity-50" : ""}`}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm text-muted-foreground">Segment {segment.segmentNumber}</div>
+                              <div className="text-lg font-semibold text-foreground">
+                                {segment.type || "Untitled segment"}
+                              </div>
+                            </div>
+                            <div className="text-right text-sm">
+                              <div className="text-muted-foreground">Start</div>
+                              <div className="font-medium text-foreground">{formatClockTime(segment.startSeconds)}</div>
+                            </div>
+                            <div className="text-right text-sm">
+                              <div className="text-muted-foreground">Duration</div>
+                              <div className="font-medium text-foreground">{formatDuration(segment.durationSeconds)}</div>
+                            </div>
                           </div>
+                          {segment.isSkipped && (
+                            <div className="mt-2 text-xs uppercase text-muted-foreground">Skipped</div>
+                          )}
                         </div>
-                        <div className="text-right text-sm">
-                          <div className="text-muted-foreground">Start</div>
-                          <div className="font-medium text-foreground">{formatClockTime(segment.startSeconds)}</div>
-                        </div>
-                        <div className="text-right text-sm">
-                          <div className="text-muted-foreground">Duration</div>
-                          <div className="font-medium text-foreground">{formatDuration(segment.durationSeconds)}</div>
-                        </div>
-                      </div>
-                      {segment.isSkipped && <div className="mt-2 text-xs uppercase text-muted-foreground">Skipped</div>}
-                    </div>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        <ContextMenuItem
+                          onSelect={() => {
+                            handleToggleSkip(segment.id);
+                          }}
+                        >
+                          {segment.isSkipped ? "Unskip segment" : "Skip segment"}
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          onSelect={() => {
+                            handleJumpToSegment(segment.id);
+                          }}
+                        >
+                          Jump to here
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
                   );
                 })}
               </div>
@@ -382,6 +442,17 @@ const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: Run
             </div>
           </div>
         )}
+
+        <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur">
+          <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Show Progress</div>
+          <div className="mt-3">
+            <Progress value={showProgressValue} indicatorClassName="bg-sky-500" />
+            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+              <span>{showStart != null ? `Start ${formatClockTime(showStart)}` : "No start"}</span>
+              <span>{showEnd != null ? `End ${formatClockTime(showEnd)}` : "No end"}</span>
+            </div>
+          </div>
+        </div>
 
         <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur">
           <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Live Segment</div>
@@ -415,6 +486,14 @@ const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: Run
               : nextSegment
                 ? "Time until next segment"
                 : "Show complete"}
+          </div>
+          <div className="mt-2 text-sm text-muted-foreground">
+            {showEnd != null ? `Show time left: ${formatDuration(showRemainingSeconds)}` : "Show time left: --:--"}
+          </div>
+          <div className="mt-4">
+            <Button variant="outline" size="sm" onClick={handleJumpToNext} disabled={!currentSegment && !nextSegment}>
+              Next segment
+            </Button>
           </div>
         </div>
       </div>

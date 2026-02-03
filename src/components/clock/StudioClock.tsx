@@ -17,6 +17,7 @@ import SecondsRing from "./SecondsRing";
 import DigitalDisplay from "./DigitalDisplay";
 import Stopwatch from "./Stopwatch";
 import RunningOrderLayout from "./RunningOrderLayout";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import studioLogo from "@/assets/studio-logo.png";
 
 const StudioClock = () => {
@@ -38,6 +39,16 @@ const StudioClock = () => {
     }, 100);
 
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMode("clock");
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
   useEffect(() => {
@@ -72,9 +83,17 @@ const StudioClock = () => {
   const timeString = format(time, "HH:mm:ss");
   const dateString = format(time, "EEEE d MMMM yyyy", { locale: sv });
   const currentSecond = time.getSeconds();
-  const runningOrderClockSize = Math.min(width * 0.4, 360);
+  const runningOrderClockSize = Math.min(width * 0.35, 280);
   const defaultClockSize = Math.min(width * 0.9, 500);
   const clockSize = mode === "running-order" ? runningOrderClockSize : defaultClockSize;
+  const isRunningOrder = mode === "running-order";
+  const logoClassName = isRunningOrder ? "w-16 sm:w-20 opacity-30" : "w-28 sm:w-36 opacity-30";
+  const digitalClassName = isRunningOrder
+    ? "text-2xl sm:text-3xl md:text-4xl lg:text-5xl"
+    : "text-4xl sm:text-5xl md:text-6xl lg:text-7xl";
+  const digitalStandaloneClassName = isRunningOrder
+    ? "text-4xl sm:text-5xl md:text-6xl lg:text-7xl"
+    : "text-6xl sm:text-7xl md:text-8xl lg:text-9xl";
 
   const clockContent = useMemo(
     () => (
@@ -96,19 +115,19 @@ const StudioClock = () => {
               <img
                 src={studioLogo}
                 alt="Studio logo"
-                className="absolute top-[18%] left-1/2 -translate-x-1/2 w-28 sm:w-36 opacity-30"
+                className={`absolute top-[18%] left-1/2 -translate-x-1/2 ${logoClassName}`}
               />
             )}
 
             <div className="absolute inset-0 flex items-center justify-center">
-              <DigitalDisplay time={timeString} className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl" />
+              <DigitalDisplay time={timeString} className={digitalClassName} />
             </div>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-4">
-            {showLogo && <img src={studioLogo} alt="Studio logo" className="w-28 sm:w-36 opacity-30" />}
+            {showLogo && <img src={studioLogo} alt="Studio logo" className={logoClassName} />}
 
-            <DigitalDisplay time={timeString} className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl" />
+            <DigitalDisplay time={timeString} className={digitalStandaloneClassName} />
           </div>
         )}
 
@@ -290,6 +309,7 @@ const StudioClock = () => {
         <div className="flex flex-col items-center justify-center">{clockContent}</div>
       ) : (
         <div className="flex w-full flex-1 items-stretch justify-center gap-6 pt-16">
+          <ErrorBoundary fallbackTitle="Running order error" onReset={() => setMode("clock")}>
           <RunningOrderLayout
             now={time}
             persistKey="studio_timepiece_running_order_v1"
@@ -297,10 +317,14 @@ const StudioClock = () => {
             clockSlot={
               <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur">
                 <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Clock</div>
-                <div className="mt-4 flex flex-col items-center">{clockContent}</div>
+                <div className="mt-4 flex flex-col items-center">
+                  <DigitalDisplay time={timeString} className="text-3xl sm:text-4xl md:text-5xl" />
+                  <div className="mt-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">{dateString}</div>
+                </div>
               </div>
             }
           />
+          </ErrorBoundary>
         </div>
       )}
     </div>
