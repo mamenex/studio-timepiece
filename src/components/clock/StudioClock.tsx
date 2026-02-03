@@ -58,7 +58,7 @@ const StudioClock = () => {
   };
 
   const timeString = format(time, "HH:mm:ss");
-  const dateString = format(time, "EEEE, d MMMM yyyy", { locale: sv });
+  const dateString = format(time, "EEEE d MMMM yyyy", { locale: sv });
   const currentSecond = time.getSeconds();
 
   return (
