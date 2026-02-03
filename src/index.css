@@ -115,11 +115,17 @@
 
 .led-display {
   font-family: 'DSEG7', 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
 }
 
 .led-dim {
   color: hsl(var(--clock-led-dim));
   text-shadow: none;
+  opacity: 0.14;
+  filter: blur(0.2px);
 }
 
 .led-dot {
