@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useWindowSize } from "@/hooks/useWindowSize";
-import { Maximize, Minimize, Timer, Calendar, Plus, Minus, Type } from "lucide-react";
+import { Maximize, Minimize, Timer, Calendar, Plus, Minus, Type, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SecondsRing from "./SecondsRing";
 import DigitalDisplay from "./DigitalDisplay";
@@ -16,6 +16,7 @@ const StudioClock = () => {
   const [showDate, setShowDate] = useState(true);
   const [showTitle, setShowTitle] = useState(true);
   const [showLogo, setShowLogo] = useState(true);
+  const [showSecondsRing, setShowSecondsRing] = useState(true);
   const [zoom, setZoom] = useState(1);
   const { width } = useWindowSize();
 
@@ -105,6 +106,15 @@ const StudioClock = () => {
         >
           <Timer className="h-5 w-5" />
         </Button>
+        <Button
+          onClick={() => setShowSecondsRing(!showSecondsRing)}
+          variant="ghost"
+          size="icon"
+          className={`text-muted-foreground hover:text-primary hover:bg-secondary ${showSecondsRing ? 'text-primary' : ''}`}
+          title={showSecondsRing ? "Hide seconds ring" : "Show seconds ring"}
+        >
+          <Circle className="h-5 w-5" />
+        </Button>
       </div>
 
       {/* Top Right Controls */}
@@ -156,30 +166,49 @@ const StudioClock = () => {
           </h1>
         )}
 
-        {/* Clock Face with Seconds Ring */}
-        <div className="relative flex items-center justify-center" style={{ width: 'min(90vw, 500px)', height: 'min(90vw, 500px)' }}>
-          <SecondsRing 
-            currentSecond={currentSecond} 
-            size={Math.min(width * 0.9, 500)} 
-          />
-          
-          {/* Logo - positioned between seconds ring and clock */}
-          {showLogo && (
-            <img 
-              src={studioLogo} 
-              alt="Studio logo" 
-              className="absolute top-[18%] left-1/2 -translate-x-1/2 w-28 sm:w-36 opacity-30"
+        {/* Clock Face - with or without Seconds Ring */}
+        {showSecondsRing ? (
+          <div className="relative flex items-center justify-center" style={{ width: 'min(90vw, 500px)', height: 'min(90vw, 500px)' }}>
+            <SecondsRing 
+              currentSecond={currentSecond} 
+              size={Math.min(width * 0.9, 500)} 
             />
-          )}
-          
-          {/* Digital Time Display - centered */}
-          <div className="absolute inset-0 flex items-center justify-center">
+            
+            {/* Logo - positioned between seconds ring and clock */}
+            {showLogo && (
+              <img 
+                src={studioLogo} 
+                alt="Studio logo" 
+                className="absolute top-[18%] left-1/2 -translate-x-1/2 w-28 sm:w-36 opacity-30"
+            />
+            )}
+            
+            {/* Digital Time Display - centered */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <DigitalDisplay 
+                time={timeString} 
+                className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-4">
+            {/* Logo - above digits in minimal mode */}
+            {showLogo && (
+              <img 
+                src={studioLogo} 
+                alt="Studio logo" 
+                className="w-28 sm:w-36 opacity-30"
+              />
+            )}
+            
+            {/* Digital Time Display - large standalone */}
             <DigitalDisplay 
               time={timeString} 
-              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl"
+              className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl"
             />
           </div>
-        </div>
+        )}
 
         {/* Date Display (togglable) */}
         {showDate && (
