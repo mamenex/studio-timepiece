@@ -8,6 +8,7 @@
   "build": "vite build",
   "preview": "vite preview",
   "tauri": "tauri"
+  "build:dev": "vite build --mode development"
 }
 ,
   "dependencies": {
