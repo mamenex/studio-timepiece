@@ -1,12 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useWindowSize } from "@/hooks/useWindowSize";
-import { Maximize, Minimize, Timer, Calendar, Plus, Minus, Type, Circle } from "lucide-react";
+import { Maximize, Minimize, Timer, Calendar, Plus, Minus, Type, Circle, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import SecondsRing from "./SecondsRing";
 import DigitalDisplay from "./DigitalDisplay";
 import Stopwatch from "./Stopwatch";
+import RunningOrderLayout from "./RunningOrderLayout";
 import studioLogo from "@/assets/studio-logo.png";
 
 const StudioClock = () => {
@@ -18,6 +28,8 @@ const StudioClock = () => {
   const [showLogo, setShowLogo] = useState(true);
   const [showSecondsRing, setShowSecondsRing] = useState(true);
   const [zoom, setZoom] = useState(1);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [mode, setMode] = useState<"clock" | "running-order">("clock");
   const { width } = useWindowSize();
 
   useEffect(() => {
@@ -60,164 +72,52 @@ const StudioClock = () => {
   const timeString = format(time, "HH:mm:ss");
   const dateString = format(time, "EEEE d MMMM yyyy", { locale: sv });
   const currentSecond = time.getSeconds();
+  const runningOrderClockSize = Math.min(width * 0.4, 360);
+  const defaultClockSize = Math.min(width * 0.9, 500);
+  const clockSize = mode === "running-order" ? runningOrderClockSize : defaultClockSize;
 
-  return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 sm:p-8 relative overflow-hidden">
-      {/* Top Left Controls */}
-      <div className="absolute top-4 left-4 flex gap-2 z-10">
-        <Button
-          onClick={() => setShowTitle(!showTitle)}
-          variant="ghost"
-          size="icon"
-          className={`text-muted-foreground hover:text-primary hover:bg-secondary ${showTitle ? 'text-primary' : ''}`}
-          title={showTitle ? "Hide title" : "Show title"}
-        >
-          <Type className="h-5 w-5" />
-        </Button>
-        <Button
-          onClick={() => setShowLogo(!showLogo)}
-          variant="ghost"
-          size="icon"
-          className={`text-muted-foreground hover:text-primary hover:bg-secondary ${showLogo ? 'opacity-100' : 'opacity-40'}`}
-          title={showLogo ? "Hide logo" : "Show logo"}
-        >
-          <img 
-            src={studioLogo} 
-            alt="Toggle logo" 
-            className="h-6 w-6 object-contain"
-            style={{ clipPath: 'inset(0 0 0 38%)', objectPosition: 'right center' }}
-          />
-        </Button>
-        <Button
-          onClick={() => setShowDate(!showDate)}
-          variant="ghost"
-          size="icon"
-          className={`text-muted-foreground hover:text-primary hover:bg-secondary ${showDate ? 'text-primary' : ''}`}
-          title={showDate ? "Hide date" : "Show date"}
-        >
-          <Calendar className="h-5 w-5" />
-        </Button>
-        <Button
-          onClick={() => setShowStopwatch(!showStopwatch)}
-          variant="ghost"
-          size="icon"
-          className={`text-muted-foreground hover:text-primary hover:bg-secondary ${showStopwatch ? 'text-primary' : ''}`}
-          title={showStopwatch ? "Hide stopwatch" : "Show stopwatch"}
-        >
-          <Timer className="h-5 w-5" />
-        </Button>
-        <Button
-          onClick={() => setShowSecondsRing(!showSecondsRing)}
-          variant="ghost"
-          size="icon"
-          className={`text-muted-foreground hover:text-primary hover:bg-secondary ${showSecondsRing ? 'text-primary' : ''}`}
-          title={showSecondsRing ? "Hide seconds ring" : "Show seconds ring"}
-        >
-          <Circle className="h-5 w-5" />
-        </Button>
-      </div>
-
-      {/* Top Right Controls */}
-      <div className="absolute top-4 right-4 flex gap-2 z-10">
-        <Button
-          onClick={handleZoomOut}
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground hover:text-primary hover:bg-secondary"
-          title="Zoom out"
-          disabled={zoom <= 0.5}
-        >
-          <Minus className="h-5 w-5" />
-        </Button>
-        <Button
-          onClick={handleZoomIn}
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground hover:text-primary hover:bg-secondary"
-          title="Zoom in"
-          disabled={zoom >= 2}
-        >
-          <Plus className="h-5 w-5" />
-        </Button>
-        <Button
-          onClick={toggleFullscreen}
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground hover:text-primary hover:bg-secondary"
-          title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-        >
-          {isFullscreen ? (
-            <Minimize className="h-5 w-5" />
-          ) : (
-            <Maximize className="h-5 w-5" />
-          )}
-        </Button>
-      </div>
-
-      {/* Main Clock Container with Zoom */}
-      <div 
+  const clockContent = useMemo(
+    () => (
+      <div
         className="flex flex-col items-center gap-6 sm:gap-8 transition-transform duration-200"
         style={{ transform: `scale(${zoom})` }}
       >
-        {/* Title */}
         {showTitle && (
           <h1 className="text-muted-foreground text-xl sm:text-2xl md:text-3xl font-light tracking-[0.4em] uppercase">
             Studioklocka
           </h1>
         )}
 
-        {/* Clock Face - with or without Seconds Ring */}
         {showSecondsRing ? (
-          <div className="relative flex items-center justify-center" style={{ width: 'min(90vw, 500px)', height: 'min(90vw, 500px)' }}>
-            <SecondsRing 
-              currentSecond={currentSecond} 
-              size={Math.min(width * 0.9, 500)} 
-            />
-            
-            {/* Logo - positioned between seconds ring and clock */}
+          <div className="relative flex items-center justify-center" style={{ width: clockSize, height: clockSize }}>
+            <SecondsRing currentSecond={currentSecond} size={clockSize} />
+
             {showLogo && (
-              <img 
-                src={studioLogo} 
-                alt="Studio logo" 
+              <img
+                src={studioLogo}
+                alt="Studio logo"
                 className="absolute top-[18%] left-1/2 -translate-x-1/2 w-28 sm:w-36 opacity-30"
-            />
-            )}
-            
-            {/* Digital Time Display - centered */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <DigitalDisplay 
-                time={timeString} 
-                className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl"
               />
+            )}
+
+            <div className="absolute inset-0 flex items-center justify-center">
+              <DigitalDisplay time={timeString} className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl" />
             </div>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-4">
-            {/* Logo - above digits in minimal mode */}
-            {showLogo && (
-              <img 
-                src={studioLogo} 
-                alt="Studio logo" 
-                className="w-28 sm:w-36 opacity-30"
-              />
-            )}
-            
-            {/* Digital Time Display - large standalone */}
-            <DigitalDisplay 
-              time={timeString} 
-              className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl"
-            />
+            {showLogo && <img src={studioLogo} alt="Studio logo" className="w-28 sm:w-36 opacity-30" />}
+
+            <DigitalDisplay time={timeString} className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl" />
           </div>
         )}
 
-        {/* Date Display (togglable) */}
         {showDate && (
           <div className="text-muted-foreground text-lg sm:text-xl md:text-2xl font-light tracking-wide">
             {dateString}
           </div>
         )}
 
-        {/* Stopwatch (togglable) */}
         {showStopwatch && (
           <>
             <div className="w-48 h-px bg-border" />
@@ -225,6 +125,184 @@ const StudioClock = () => {
           </>
         )}
       </div>
+    ),
+    [
+      clockSize,
+      currentSecond,
+      dateString,
+      showDate,
+      showLogo,
+      showSecondsRing,
+      showStopwatch,
+      showTitle,
+      timeString,
+      zoom,
+    ],
+  );
+
+  const containerClassName =
+    mode === "running-order"
+      ? "min-h-screen bg-background flex flex-col items-stretch justify-start p-4 sm:p-8 relative overflow-hidden"
+      : "min-h-screen bg-background flex flex-col items-center justify-center p-4 sm:p-8 relative overflow-hidden";
+
+  return (
+    <div className={containerClassName}>
+      {/* Controls Dropdown */}
+      <div className="absolute top-4 left-4 z-10">
+        <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-primary hover:bg-secondary"
+              title="Open menu"
+            >
+              <ChevronDown className="h-5 w-5 data-[state=open]:animate-[spin_0.2s_linear]" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuLabel>Mode</DropdownMenuLabel>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                setMode("clock");
+              }}
+              className="flex items-center justify-between"
+            >
+              <span>Clock</span>
+              {mode === "clock" && <span className="text-xs text-muted-foreground">Active</span>}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                setMode("running-order");
+              }}
+              className="flex items-center justify-between"
+            >
+              <span>Running order</span>
+              {mode === "running-order" && <span className="text-xs text-muted-foreground">Active</span>}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                window.open("/running-order", "RunningOrder", "width=1280,height=720");
+              }}
+              className="flex items-center gap-2"
+            >
+              <span>Pop out running order</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Display</DropdownMenuLabel>
+            <DropdownMenuCheckboxItem
+              checked={showTitle}
+              onSelect={(event) => event.preventDefault()}
+              onCheckedChange={(v) => setShowTitle(v === true)}
+            >
+              <div className="flex items-center gap-2">
+                <Type className="h-4 w-4" />
+                <span>Title</span>
+              </div>
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={showLogo}
+              onSelect={(event) => event.preventDefault()}
+              onCheckedChange={(v) => setShowLogo(v === true)}
+            >
+              <div className="flex items-center gap-2">
+                <img
+                  src={studioLogo}
+                  alt=""
+                  className="h-4 w-4 object-contain"
+                  style={{ clipPath: "inset(0 0 0 38%)", objectPosition: "right center" }}
+                />
+                <span>Logo</span>
+              </div>
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={showDate}
+              onSelect={(event) => event.preventDefault()}
+              onCheckedChange={(v) => setShowDate(v === true)}
+            >
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                <span>Date</span>
+              </div>
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={showStopwatch}
+              onSelect={(event) => event.preventDefault()}
+              onCheckedChange={(v) => setShowStopwatch(v === true)}
+            >
+              <div className="flex items-center gap-2">
+                <Timer className="h-4 w-4" />
+                <span>Stopwatch</span>
+              </div>
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={showSecondsRing}
+              onSelect={(event) => event.preventDefault()}
+              onCheckedChange={(v) => setShowSecondsRing(v === true)}
+            >
+              <div className="flex items-center gap-2">
+                <Circle className="h-4 w-4" />
+                <span>Seconds ring</span>
+              </div>
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>View</DropdownMenuLabel>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                handleZoomOut();
+              }}
+              disabled={zoom <= 0.5}
+              className="flex items-center gap-2"
+            >
+              <Minus className="h-4 w-4" />
+              <span>Zoom out</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                handleZoomIn();
+              }}
+              disabled={zoom >= 2}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Zoom in</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                toggleFullscreen();
+              }}
+              className="flex items-center gap-2"
+            >
+              {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+              <span>{isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {mode === "clock" ? (
+        <div className="flex flex-col items-center justify-center">{clockContent}</div>
+      ) : (
+        <div className="flex w-full flex-1 items-stretch justify-center gap-6 pt-16">
+          <RunningOrderLayout
+            now={time}
+            persistKey="studio_timepiece_running_order_v1"
+            syncFromStorage
+            clockSlot={
+              <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur">
+                <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Clock</div>
+                <div className="mt-4 flex flex-col items-center">{clockContent}</div>
+              </div>
+            }
+          />
+        </div>
+      )}
     </div>
   );
 };
