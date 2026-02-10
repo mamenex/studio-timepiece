@@ -9,8 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "build:dev": "vite build --mode development",
-    "copy-installers": "bash scripts/copy-installers.sh",
-    "tauri:build:copy": "tauri build && bash scripts/copy-installers.sh"
+    "copy-installers": "node scripts/copy-installers.mjs",
+    "tauri:build:copy": "tauri build && node scripts/copy-installers.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

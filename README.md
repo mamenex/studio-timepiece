@@ -73,6 +73,42 @@ npm install
 npm run tauri dev
 ```
 
+### PowerShell `npm.ps1` execution policy error
+
+If you see this in PowerShell:
+
+`npm : File C:\Program Files\nodejs\npm.ps1 cannot be loaded because running scripts is disabled on this system`
+
+use one of these fixes:
+
+1. **Use Command Prompt instead of PowerShell** (quickest):
+
+```bat
+npm install
+```
+
+2. **Call the Windows command shim from PowerShell**:
+
+```powershell
+npm.cmd install
+npm.cmd run tauri dev
+```
+
+3. **Allow PowerShell scripts for your user** (persistent fix):
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+Then restart PowerShell and run:
+
+```powershell
+npm install
+npm run tauri dev
+```
+
+If policy changes are blocked by company IT rules, use option 1 or 2.
+
 To create an installer:
 
 ```sh
