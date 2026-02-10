@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "build:dev": "vite build --mode development"
+    "build:dev": "vite build --mode development",
+    "copy-installers": "bash scripts/copy-installers.sh",
+    "tauri:build:copy": "tauri build && bash scripts/copy-installers.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -40,7 +42,8 @@
     "@radix-ui/react-toggle-group": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.7",
     "@tanstack/react-query": "^5.83.0",
-    "@tauri-apps/api": "2.9.6",
+    "@tauri-apps/api": "2.9.1",
+    "@tauri-apps/plugin-updater": "2.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

@@ -4,6 +4,8 @@ import { sv } from "date-fns/locale";
 import { useWindowSize } from "@/hooks/useWindowSize";
 import { useClock } from "@/hooks/useClock";
 import { useX32MicLive } from "@/hooks/useX32MicLive";
+import { useTriCasterDdr } from "@/hooks/useTriCasterDdr";
+import { useTriCasterRecording } from "@/hooks/useTriCasterRecording";
 import { Maximize, Minimize, Timer, Calendar, Plus, Minus, Type, Circle, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -20,24 +22,84 @@ import SecondsRing from "./SecondsRing";
 import DigitalDisplay from "./DigitalDisplay";
 import Stopwatch from "./Stopwatch";
 import RunningOrderLayout from "./RunningOrderLayout";
+import DdrCountdown from "./DdrCountdown";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import studioLogo from "@/assets/studio-logo.png";
+const LOGO_STORAGE_KEY = "studio_timepiece_logo_v1";
+const LOGO_INVERT_KEY = "studio_timepiece_logo_invert_v1";
+
+const checkLogoIsDark = (dataUrl: string): Promise<boolean> =>
+  new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const width = (canvas.width = 64);
+      const height = (canvas.height = 64);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(false);
+        return;
+      }
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      const data = ctx.getImageData(0, 0, width, height).data;
+      let total = 0;
+      let count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const alpha = data[i + 3];
+        if (alpha < 20) continue;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        total += luminance;
+        count += 1;
+      }
+      if (count === 0) {
+        resolve(false);
+        return;
+      }
+      const avg = total / count;
+      resolve(avg < 140);
+    };
+    img.onerror = () => resolve(false);
+    img.src = dataUrl;
+  });
 
 const StudioClock = () => {
   const { now: time, source: clockSource, statusLabel, lastSync, setSource: setClockSource } = useClock();
   const { config: x32Config, setConfig: setX32Config, state: x32State, liveChannels, isTauri } = useX32MicLive();
+  const {
+    config: tricasterConfig,
+    setConfig: setTricasterConfig,
+    state: tricasterState,
+    countdown: tricasterCountdown,
+  } = useTriCasterDdr();
+  const {
+    config: tricasterRecordConfig,
+    setConfig: setTricasterRecordConfig,
+    state: tricasterRecordState,
+  } = useTriCasterRecording();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showStopwatch, setShowStopwatch] = useState(false);
   const [showDate, setShowDate] = useState(true);
   const [showTitle, setShowTitle] = useState(true);
   const [titleText, setTitleText] = useState("Studioklocka");
+  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
   const [showLogo, setShowLogo] = useState(true);
+  const [invertLogo, setInvertLogo] = useState(false);
+  const [logoIsDark, setLogoIsDark] = useState(false);
   const [showSecondsRing, setShowSecondsRing] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [mode, setMode] = useState<"clock" | "running-order" | "settings">("clock");
   const [keepClockOnPopout, setKeepClockOnPopout] = useState(true);
   const { width } = useWindowSize();
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<
+    "idle" | "checking" | "available" | "downloading" | "installing" | "up-to-date" | "error"
+  >("idle");
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [availableUpdate, setAvailableUpdate] = useState<any | null>(null);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -50,6 +112,62 @@ const StudioClock = () => {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem(LOGO_STORAGE_KEY);
+      if (stored) {
+        setLogoDataUrl(stored);
+      }
+      const storedInvert = window.localStorage.getItem(LOGO_INVERT_KEY);
+      if (storedInvert != null) {
+        setInvertLogo(storedInvert === "true");
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (logoDataUrl) {
+        window.localStorage.setItem(LOGO_STORAGE_KEY, logoDataUrl);
+      } else {
+        window.localStorage.removeItem(LOGO_STORAGE_KEY);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [logoDataUrl]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(LOGO_INVERT_KEY, String(invertLogo));
+    } catch {
+      // ignore storage errors
+    }
+  }, [invertLogo]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!logoDataUrl) {
+        setLogoIsDark(false);
+        return;
+      }
+      const isDark = await checkLogoIsDark(logoDataUrl);
+      if (!cancelled) {
+        setLogoIsDark(isDark);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [logoDataUrl]);
+
+  useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
@@ -57,6 +175,28 @@ const StudioClock = () => {
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
+
+  useEffect(() => {
+    if (!isTauri) return;
+    let cancelled = false;
+    const loadVersion = async () => {
+      try {
+        const { getVersion } = await import("@tauri-apps/api/app");
+        const version = await getVersion();
+        if (!cancelled) {
+          setAppVersion(version);
+        }
+      } catch {
+        if (!cancelled) {
+          setAppVersion(null);
+        }
+      }
+    };
+    loadVersion();
+    return () => {
+      cancelled = true;
+    };
+  }, [isTauri]);
 
   const toggleFullscreen = async () => {
     try {
@@ -78,6 +218,42 @@ const StudioClock = () => {
     setZoom((prev) => Math.max(prev - 0.1, 0.5));
   };
 
+  const handleCheckUpdates = async () => {
+    if (!isTauri) return;
+    setUpdateStatus("checking");
+    setUpdateMessage(null);
+    setAvailableUpdate(null);
+    try {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const update = await check();
+      if (update) {
+        setAvailableUpdate(update);
+        setUpdateStatus("available");
+        setUpdateMessage(update.version ? `Update available: v${update.version}` : "Update available");
+      } else {
+        setUpdateStatus("up-to-date");
+        setUpdateMessage("You are up to date.");
+      }
+    } catch (err) {
+      setUpdateStatus("error");
+      setUpdateMessage(err instanceof Error ? err.message : "Failed to check for updates.");
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    if (!availableUpdate) return;
+    setUpdateStatus("downloading");
+    setUpdateMessage("Downloading update...");
+    try {
+      await availableUpdate.downloadAndInstall();
+      setUpdateStatus("installing");
+      setUpdateMessage("Installing update. The app will restart.");
+    } catch (err) {
+      setUpdateStatus("error");
+      setUpdateMessage(err instanceof Error ? err.message : "Failed to install update.");
+    }
+  };
+
   const timeString = format(time, "HH:mm:ss");
   const dateString = format(time, "EEEE d MMMM yyyy", { locale: sv });
   const currentSecond = time.getSeconds();
@@ -95,6 +271,20 @@ const StudioClock = () => {
   const showMicIndicator = x32Config.enabled && x32Config.showIndicator && isTauri;
   const micLive = x32State.anyLive;
   const resolvedTitleText = titleText.trim().length > 0 ? titleText.trim() : "Studioklocka";
+  const showTricasterCountdown = tricasterConfig.enabled && tricasterConfig.showCountdown;
+  const showTricasterRecording = tricasterRecordConfig.enabled && tricasterRecordConfig.showIndicator;
+
+  const tricasterRecordingPillClass = (recording: boolean | null) =>
+    `rounded-full px-3 py-1 text-xs uppercase tracking-[0.35em] ${
+      recording
+        ? "bg-rose-500/90 text-white shadow-[0_0_14px_rgba(244,63,94,0.55)]"
+        : "bg-foreground/10 text-muted-foreground"
+    }`;
+
+  const tricasterRecordingLabel = (recording: boolean | null) => {
+    if (recording == null) return "TRICASTER --";
+    return recording ? "TRICASTER REC" : "TRICASTER IDLE";
+  };
 
   const clockContent = useMemo(
     () => (
@@ -107,40 +297,81 @@ const StudioClock = () => {
             {resolvedTitleText}
           </h1>
         )}
-        {showMicIndicator && (
-          <div
-            className={`rounded-full px-4 py-1 text-xs uppercase tracking-[0.35em] ${
-              micLive
-                ? "bg-rose-500/90 text-white shadow-[0_0_14px_rgba(244,63,94,0.55)]"
-                : "bg-emerald-500/10 text-emerald-200"
-            }`}
-          >
-            {micLive ? "Mic live" : "Mics muted"}
-            {liveChannels.length > 0 ? ` • ${liveChannels.length}` : ""}
+        {(showTricasterRecording || showMicIndicator) && (
+          <div className="flex flex-wrap items-center gap-3">
+            {showTricasterRecording && (
+              <div className={tricasterRecordingPillClass(tricasterRecordState.recording)}>
+                {tricasterRecordingLabel(tricasterRecordState.recording)}
+              </div>
+            )}
+            {showMicIndicator && (
+              <div
+                className={`rounded-full px-4 py-1 text-xs uppercase tracking-[0.35em] ${
+                  micLive
+                    ? "bg-rose-500/90 text-white shadow-[0_0_14px_rgba(244,63,94,0.55)]"
+                    : "bg-emerald-500/10 text-emerald-200"
+                }`}
+              >
+                {micLive ? "Mic live" : "Mics muted"}
+                {liveChannels.length > 0 ? ` • ${liveChannels.length}` : ""}
+              </div>
+            )}
           </div>
         )}
 
         {showSecondsRing ? (
-          <div className="relative flex items-center justify-center" style={{ width: clockSize, height: clockSize }}>
-            <SecondsRing currentSecond={currentSecond} size={clockSize} />
-
-            {showLogo && (
-              <img
-                src={studioLogo}
-                alt="Studio logo"
-                className={`absolute top-[18%] left-1/2 -translate-x-1/2 ${logoClassName}`}
-              />
+          <div className="relative flex w-full items-center justify-center">
+            {showTricasterCountdown && (
+              <div className="absolute left-0 top-1/2 -translate-y-1/2">
+                <DdrCountdown
+                  label={tricasterConfig.label}
+                  seconds={tricasterCountdown.remainingSeconds}
+                  active={tricasterCountdown.active}
+                  size="lg"
+                />
+              </div>
             )}
+            <div className="relative flex items-center justify-center" style={{ width: clockSize, height: clockSize }}>
+              <SecondsRing currentSecond={currentSecond} size={clockSize} />
 
-            <div className="absolute inset-0 flex items-center justify-center">
-              <DigitalDisplay time={timeString} className={digitalClassName} />
+              {showLogo && logoDataUrl && (
+                <img
+                  src={logoDataUrl}
+                  alt="Studio logo"
+                  className={`absolute top-[18%] left-1/2 -translate-x-1/2 ${logoClassName}`}
+                  style={invertLogo ? { filter: "invert(1)" } : undefined}
+                />
+              )}
+
+              <div className="absolute inset-0 flex items-center justify-center">
+                <DigitalDisplay time={timeString} className={digitalClassName} />
+              </div>
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-4">
-            {showLogo && <img src={studioLogo} alt="Studio logo" className={logoClassName} />}
+          <div className="relative flex w-full items-center justify-center">
+            {showTricasterCountdown && (
+              <div className="absolute left-0 top-1/2 -translate-y-1/2">
+                <DdrCountdown
+                  label={tricasterConfig.label}
+                  seconds={tricasterCountdown.remainingSeconds}
+                  active={tricasterCountdown.active}
+                  size="lg"
+                />
+              </div>
+            )}
+            <div className="flex flex-col items-center gap-4">
+              {showLogo && logoDataUrl && (
+                <img
+                  src={logoDataUrl}
+                  alt="Logo"
+                  className={logoClassName}
+                  style={invertLogo ? { filter: "invert(1)" } : undefined}
+                />
+              )}
 
-            <DigitalDisplay time={timeString} className={digitalStandaloneClassName} />
+              <DigitalDisplay time={timeString} className={digitalStandaloneClassName} />
+            </div>
           </div>
         )}
 
@@ -170,7 +401,13 @@ const StudioClock = () => {
       showSecondsRing,
       showStopwatch,
       showTitle,
+      showTricasterCountdown,
+      showTricasterRecording,
       timeString,
+      tricasterRecordState.recording,
+      tricasterConfig.label,
+      tricasterCountdown.active,
+      tricasterCountdown.remainingSeconds,
       resolvedTitleText,
       zoom,
     ],
@@ -266,14 +503,9 @@ const StudioClock = () => {
               checked={showLogo}
               onSelect={(event) => event.preventDefault()}
               onCheckedChange={(v) => setShowLogo(v === true)}
+              disabled={!logoDataUrl}
             >
               <div className="flex items-center gap-2">
-                <img
-                  src={studioLogo}
-                  alt=""
-                  className="h-4 w-4 object-contain"
-                  style={{ clipPath: "inset(0 0 0 38%)", objectPosition: "right center" }}
-                />
                 <span>Logo</span>
               </div>
             </DropdownMenuCheckboxItem>
@@ -356,6 +588,16 @@ const StudioClock = () => {
               syncFromStorage
               popoutClockEnabled={keepClockOnPopout}
               onTogglePopoutClock={setKeepClockOnPopout}
+              ddrCountdownSlot={
+                showTricasterCountdown ? (
+                  <DdrCountdown
+                    label={tricasterConfig.label}
+                    seconds={tricasterCountdown.remainingSeconds}
+                    active={tricasterCountdown.active}
+                    size="sm"
+                  />
+                ) : null
+              }
               clockSlot={
                 <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur">
                   <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Clock</div>
@@ -414,6 +656,108 @@ const StudioClock = () => {
             </div>
 
             <div className="mt-8 border-t border-border/60 pt-6">
+              <div className="text-lg font-semibold text-foreground">App updates</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {isTauri ? `Current version: ${appVersion ?? "Unknown"}` : "Only available in the desktop app"}
+              </div>
+              {isTauri && (
+                <div className="mt-4 flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCheckUpdates}
+                      disabled={updateStatus === "checking" || updateStatus === "downloading" || updateStatus === "installing"}
+                    >
+                      {updateStatus === "checking" ? "Checking..." : "Check for updates"}
+                    </Button>
+                    {availableUpdate && (
+                      <Button
+                        type="button"
+                        onClick={handleInstallUpdate}
+                        disabled={updateStatus === "downloading" || updateStatus === "installing"}
+                      >
+                        {updateStatus === "downloading" ? "Downloading..." : "Update now"}
+                      </Button>
+                    )}
+                  </div>
+                  {updateMessage && <div className="text-xs text-muted-foreground">{updateMessage}</div>}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-8 border-t border-border/60 pt-6">
+              <div className="text-lg font-semibold text-foreground">Logo</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Upload a custom logo to show on the watch face. Use a transparent PNG with a light/white (negative)
+                mark for best results on the dark background.
+              </div>
+              <div className="mt-4 flex flex-col gap-3">
+                {logoDataUrl ? (
+                  <div className="flex items-center gap-3">
+                    <div className="h-16 w-16 rounded-md border border-border/60 bg-foreground/10 p-2">
+                      <img
+                        src={logoDataUrl}
+                        alt="Logo preview"
+                        className="h-full w-full object-contain"
+                        style={invertLogo ? { filter: "invert(1)" } : undefined}
+                      />
+                    </div>
+                    <div className="text-xs text-muted-foreground">Preview</div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">No logo uploaded yet.</div>
+                )}
+                {logoIsDark && (
+                  <>
+                    <div className="text-xs text-amber-200">
+                      This logo looks dark. Consider a light/white (negative) version for better visibility.
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Switch checked={invertLogo} onCheckedChange={setInvertLogo} disabled={!logoDataUrl} />
+                      <span className="text-sm text-muted-foreground">Invert logo colors</span>
+                    </div>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const result = typeof reader.result === "string" ? reader.result : null;
+                      setLogoDataUrl(result);
+                      setShowLogo(true);
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                  className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                />
+                <div className="flex items-center gap-3">
+                  <Switch checked={showLogo} onCheckedChange={setShowLogo} disabled={!logoDataUrl} />
+                  <span className="text-sm text-muted-foreground">Show logo on clock</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setLogoDataUrl(null);
+                    }}
+                    disabled={!logoDataUrl}
+                  >
+                    Remove logo
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Logo is stored locally on this device.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 border-t border-border/60 pt-6">
               <div className="text-lg font-semibold text-foreground">X32 mic live</div>
               <div className="mt-1 text-sm text-muted-foreground">
                 {isTauri
@@ -465,6 +809,179 @@ const StudioClock = () => {
                 </label>
               </div>
               <div className="mt-2 text-xs text-muted-foreground">Channels: 1–6 • Live = unmuted + fader above -inf</div>
+            </div>
+
+            <div className="mt-8 border-t border-border/60 pt-6">
+              <div className="text-lg font-semibold text-foreground">TriCaster DDR countdown</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {tricasterConfig.enabled
+                  ? tricasterState.status === "error"
+                    ? `Error: ${tricasterState.error ?? "Unable to connect"}`
+                    : tricasterState.status === "listening"
+                      ? "Listening for DDR state"
+                      : "Connecting"
+                  : "Disabled"}
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Switch
+                  checked={tricasterConfig.enabled}
+                  onCheckedChange={(value) => setTricasterConfig({ enabled: value })}
+                />
+                <span className="text-sm text-muted-foreground">Enable TriCaster DDR integration</span>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Switch
+                  checked={tricasterConfig.showCountdown}
+                  onCheckedChange={(value) => setTricasterConfig({ showCountdown: value })}
+                  disabled={!tricasterConfig.enabled}
+                />
+                <span className="text-sm text-muted-foreground">Show DDR countdown on clock</span>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  TriCaster host
+                  <input
+                    value={tricasterConfig.host}
+                    onChange={(event) => setTricasterConfig({ host: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="192.168.0.100:5951"
+                    disabled={!tricasterConfig.enabled}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Label text
+                  <input
+                    value={tricasterConfig.label}
+                    onChange={(event) => setTricasterConfig({ label: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="Inslag"
+                    disabled={!tricasterConfig.enabled}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Username
+                  <input
+                    value={tricasterConfig.username}
+                    onChange={(event) => setTricasterConfig({ username: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="admin"
+                    disabled={!tricasterConfig.enabled}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Password
+                  <input
+                    type="password"
+                    value={tricasterConfig.password}
+                    onChange={(event) => setTricasterConfig({ password: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="password"
+                    disabled={!tricasterConfig.enabled}
+                  />
+                </label>
+              </div>
+              <div className="mt-3">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Remaining time state pattern
+                  <input
+                    value={tricasterConfig.remainingStatePattern}
+                    onChange={(event) => setTricasterConfig({ remainingStatePattern: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="ddr{n}_time_remaining"
+                    disabled={!tricasterConfig.enabled}
+                  />
+                </label>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Use &#123;n&#125; for DDR number. Find state names via `/v1/dictionary?key=shortcut_states`.
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                Uses TriCaster shortcut state notifications. Ensure the TriCaster API is enabled and accessible on port
+                5951.
+              </div>
+            </div>
+
+            <div className="mt-8 border-t border-border/60 pt-6">
+              <div className="text-lg font-semibold text-foreground">TriCaster recording</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {tricasterRecordConfig.enabled
+                  ? tricasterRecordState.status === "error"
+                    ? `Error: ${tricasterRecordState.error ?? "Unable to connect"}`
+                    : tricasterRecordState.status === "listening"
+                      ? "Listening for recording state"
+                      : tricasterRecordState.status === "connecting"
+                        ? "Connecting"
+                        : "Disabled"
+                  : "Disabled"}
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Switch
+                  checked={tricasterRecordConfig.enabled}
+                  onCheckedChange={(value) => setTricasterRecordConfig({ enabled: value })}
+                />
+                <span className="text-sm text-muted-foreground">Enable TriCaster recording</span>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Switch
+                  checked={tricasterRecordConfig.showIndicator}
+                  onCheckedChange={(value) => setTricasterRecordConfig({ showIndicator: value })}
+                  disabled={!tricasterRecordConfig.enabled}
+                />
+                <span className="text-sm text-muted-foreground">Show recording status on clock</span>
+              </div>
+              <div className="mt-4">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  TriCaster host
+                  <input
+                    value={tricasterRecordConfig.host}
+                    onChange={(event) => setTricasterRecordConfig({ host: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="192.168.0.101:5951"
+                    disabled={!tricasterRecordConfig.enabled}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Username
+                  <input
+                    value={tricasterRecordConfig.username}
+                    onChange={(event) => setTricasterRecordConfig({ username: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="admin"
+                    disabled={!tricasterRecordConfig.enabled}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Password
+                  <input
+                    type="password"
+                    value={tricasterRecordConfig.password}
+                    onChange={(event) => setTricasterRecordConfig({ password: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="password"
+                    disabled={!tricasterRecordConfig.enabled}
+                  />
+                </label>
+              </div>
+              <div className="mt-3">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Record state name
+                  <input
+                    value={tricasterRecordConfig.stateName}
+                    onChange={(event) => setTricasterRecordConfig({ stateName: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="recording"
+                    disabled={!tricasterRecordConfig.enabled}
+                  />
+                </label>
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                Use shortcut state names (via `/v1/dictionary?key=shortcut_states`). Recording values should be true/false
+                or 1/0.
+              </div>
             </div>
           </div>
         </div>

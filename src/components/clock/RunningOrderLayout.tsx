@@ -37,6 +37,7 @@ type RunningOrderLayoutProps = {
   persistKey?: string;
   syncFromStorage?: boolean;
   clockSlot?: ReactNode;
+  ddrCountdownSlot?: ReactNode;
   popoutClockEnabled?: boolean;
   onTogglePopoutClock?: (next: boolean) => void;
 };
@@ -134,6 +135,7 @@ const RunningOrderLayout = ({
   persistKey,
   syncFromStorage,
   clockSlot,
+  ddrCountdownSlot,
   popoutClockEnabled,
   onTogglePopoutClock,
 }: RunningOrderLayoutProps) => {
@@ -624,23 +626,28 @@ const RunningOrderLayout = ({
       </div>
 
       <div className="flex w-[min(38vw,420px)] flex-col gap-4">
-        {clockSlot ? (
-          clockSlot
-        ) : (
-          <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur">
-            <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Clock</div>
-            <div className="mt-4 flex flex-col items-center gap-3">
-              <DigitalDisplay time={format(now, "HH:mm:ss")} className="text-4xl sm:text-5xl" />
-              <div className="text-sm text-muted-foreground">{format(now, "EEEE d MMMM yyyy", { locale: sv })}</div>
-            </div>
-            {typeof popoutClockEnabled === "boolean" && onTogglePopoutClock && (
-              <div className="mt-4 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>Keep clock visible when popped out</span>
-                <Switch checked={popoutClockEnabled} onCheckedChange={onTogglePopoutClock} />
+        <div className={ddrCountdownSlot ? "flex items-stretch gap-3" : ""}>
+          {ddrCountdownSlot && <div className="flex items-center">{ddrCountdownSlot}</div>}
+          <div className="min-w-0 flex-1">
+            {clockSlot ? (
+              clockSlot
+            ) : (
+              <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur">
+                <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Clock</div>
+                <div className="mt-4 flex flex-col items-center gap-3">
+                  <DigitalDisplay time={format(now, "HH:mm:ss")} className="text-4xl sm:text-5xl" />
+                  <div className="text-sm text-muted-foreground">{format(now, "EEEE d MMMM yyyy", { locale: sv })}</div>
+                </div>
+                {typeof popoutClockEnabled === "boolean" && onTogglePopoutClock && (
+                  <div className="mt-4 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>Keep clock visible when popped out</span>
+                    <Switch checked={popoutClockEnabled} onCheckedChange={onTogglePopoutClock} />
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
+        </div>
 
         <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur">
           <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Show Progress</div>

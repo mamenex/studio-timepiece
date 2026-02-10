@@ -1,10 +1,14 @@
 import { useClock } from "@/hooks/useClock";
+import { useTriCasterDdr } from "@/hooks/useTriCasterDdr";
 import RunningOrderLayout from "@/components/clock/RunningOrderLayout";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
+import DdrCountdown from "@/components/clock/DdrCountdown";
 
 const RunningOrder = () => {
   const { now: time } = useClock();
+  const { config: tricasterConfig, countdown: tricasterCountdown } = useTriCasterDdr();
+  const showTricasterCountdown = tricasterConfig.enabled && tricasterConfig.showCountdown;
 
   return (
     <div className="min-h-screen bg-background p-4 sm:p-8">
@@ -13,6 +17,16 @@ const RunningOrder = () => {
           now={time}
           persistKey="studio_timepiece_running_order_v1"
           syncFromStorage
+          ddrCountdownSlot={
+            showTricasterCountdown ? (
+              <DdrCountdown
+                label={tricasterConfig.label}
+                seconds={tricasterCountdown.remainingSeconds}
+                active={tricasterCountdown.active}
+                size="sm"
+              />
+            ) : null
+          }
           clockSlot={
             <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur">
               <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-muted-foreground">

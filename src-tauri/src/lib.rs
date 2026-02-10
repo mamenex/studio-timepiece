@@ -262,6 +262,7 @@ pub fn run() {
       }
       Ok(())
     })
+    .plugin(tauri_plugin_updater::Builder::new().build())
     .manage(X32ListenerState::default())
     .invoke_handler(tauri::generate_handler![start_x32_listener, stop_x32_listener])
     .run(tauri::generate_context!())
