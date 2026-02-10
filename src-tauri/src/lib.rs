@@ -1,3 +1,254 @@
+use std::{
+  collections::HashMap,
+  net::UdpSocket,
+  sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+  },
+  thread,
+  time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
+
+use rosc::{encoder, OscMessage, OscPacket, OscType};
+use serde::Serialize;
+use tauri::Emitter;
+
+#[derive(Default)]
+struct X32ListenerState {
+  inner: Mutex<Option<X32ListenerHandle>>,
+}
+
+struct X32ListenerHandle {
+  stop: Arc<AtomicBool>,
+  thread: Option<thread::JoinHandle<()>>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ChannelState {
+  on: bool,
+  fader: f32,
+}
+
+#[derive(Serialize, Clone)]
+struct MicChannelPayload {
+  channel: u8,
+  on: bool,
+  fader: f32,
+  live: bool,
+}
+
+#[derive(Serialize, Clone)]
+struct MicStatePayload {
+  channels: Vec<MicChannelPayload>,
+  any_live: bool,
+  updated_at: u64,
+}
+
+fn osc_arg_to_f32(arg: &OscType) -> Option<f32> {
+  match arg {
+    OscType::Float(value) => Some(*value),
+    OscType::Double(value) => Some(*value as f32),
+    OscType::Int(value) => Some(*value as f32),
+    OscType::Long(value) => Some(*value as f32),
+    _ => None,
+  }
+}
+
+fn parse_channel_from_addr(addr: &str) -> Option<u8> {
+  let parts: Vec<&str> = addr.split('/').collect();
+  if parts.len() < 3 {
+    return None;
+  }
+  if parts[1] != "ch" {
+    return None;
+  }
+  parts[2].parse::<u8>().ok()
+}
+
+fn send_subscribe(socket: &UdpSocket, target: &str, address: &str, time_factor: i32) {
+  let message = OscMessage {
+    addr: "/subscribe".to_string(),
+    args: vec![OscType::String(address.to_string()), OscType::Int(time_factor)],
+  };
+  let packet = OscPacket::Message(message);
+  if let Ok(buf) = encoder::encode(&packet) {
+    let _ = socket.send_to(&buf, target);
+  }
+}
+
+fn emit_state(
+  app: &tauri::AppHandle,
+  channels: &[u8],
+  states: &HashMap<u8, ChannelState>,
+  threshold: f32,
+) {
+  let mut payload_channels = Vec::with_capacity(channels.len());
+  for channel in channels {
+    let state = states.get(channel).copied().unwrap_or(ChannelState { on: false, fader: 0.0 });
+    let live = state.on && state.fader > threshold;
+    payload_channels.push(MicChannelPayload {
+      channel: *channel,
+      on: state.on,
+      fader: state.fader,
+      live,
+    });
+  }
+  let any_live = payload_channels.iter().any(|entry| entry.live);
+  let updated_at = SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .map(|duration| duration.as_millis() as u64)
+    .unwrap_or(0);
+  let payload = MicStatePayload {
+    channels: payload_channels,
+    any_live,
+    updated_at,
+  };
+  let _ = app.emit("x32_mic_state", payload);
+}
+
+#[tauri::command]
+fn start_x32_listener(
+  app: tauri::AppHandle,
+  state: tauri::State<X32ListenerState>,
+  host: String,
+  port: u16,
+  channels: Vec<u8>,
+  threshold: f32,
+) -> Result<(), String> {
+  stop_x32_listener(state.clone())?;
+
+  let socket = UdpSocket::bind("0.0.0.0:0").map_err(|err| err.to_string())?;
+  socket
+    .set_read_timeout(Some(Duration::from_millis(250)))
+    .map_err(|err| err.to_string())?;
+
+  let target = format!("{host}:{port}");
+  let channel_list = if channels.is_empty() {
+    vec![1, 2, 3, 4, 5, 6]
+  } else {
+    channels
+  };
+  let subscribe_paths: Vec<String> = channel_list
+    .iter()
+    .flat_map(|channel| {
+      [
+        format!("/ch/{:02}/mix/on", channel),
+        format!("/ch/{:02}/mix/fader", channel),
+      ]
+    })
+    .collect();
+
+  let stop_flag = Arc::new(AtomicBool::new(false));
+  let thread_stop = stop_flag.clone();
+  let app_handle = app.clone();
+
+  let handle = thread::spawn(move || {
+    let mut states: HashMap<u8, ChannelState> = HashMap::new();
+    let mut last_subscribe = Instant::now() - Duration::from_secs(30);
+    let mut buf = [0u8; 2048];
+
+    while !thread_stop.load(Ordering::Relaxed) {
+      if last_subscribe.elapsed() >= Duration::from_secs(8) {
+        for path in &subscribe_paths {
+          send_subscribe(&socket, &target, path, 20);
+        }
+        last_subscribe = Instant::now();
+      }
+
+      match socket.recv_from(&mut buf) {
+        Ok((size, _)) => {
+          if let Ok((_, packet)) = rosc::decoder::decode_udp(&buf[..size]) {
+            handle_packet(&app_handle, &channel_list, &mut states, threshold, packet);
+          }
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
+        Err(err) if err.kind() == std::io::ErrorKind::TimedOut => {}
+        Err(_) => {}
+      }
+    }
+  });
+
+  let mut guard = state.inner.lock().map_err(|_| "Listener lock poisoned".to_string())?;
+  *guard = Some(X32ListenerHandle {
+    stop: stop_flag,
+    thread: Some(handle),
+  });
+  Ok(())
+}
+
+fn handle_packet(
+  app: &tauri::AppHandle,
+  channels: &[u8],
+  states: &mut HashMap<u8, ChannelState>,
+  threshold: f32,
+  packet: OscPacket,
+) {
+  match packet {
+    OscPacket::Message(message) => handle_message(app, channels, states, threshold, message),
+    OscPacket::Bundle(bundle) => {
+      for entry in bundle.content {
+        handle_packet(app, channels, states, threshold, entry);
+      }
+    }
+  }
+}
+
+fn handle_message(
+  app: &tauri::AppHandle,
+  channels: &[u8],
+  states: &mut HashMap<u8, ChannelState>,
+  threshold: f32,
+  message: OscMessage,
+) {
+  let channel = match parse_channel_from_addr(&message.addr) {
+    Some(channel) => channel,
+    None => return,
+  };
+
+  if message.addr.ends_with("/mix/on") {
+    if let Some(arg) = message.args.first() {
+      let on = match arg {
+        OscType::Int(value) => *value != 0,
+        OscType::Long(value) => *value != 0,
+        OscType::Float(value) => *value > 0.0,
+        OscType::Double(value) => *value > 0.0,
+        _ => false,
+      };
+      let entry = states.entry(channel).or_insert(ChannelState { on: false, fader: 0.0 });
+      if entry.on != on {
+        entry.on = on;
+        emit_state(app, channels, states, threshold);
+      }
+    }
+  }
+
+  if message.addr.ends_with("/mix/fader") {
+    if let Some(arg) = message.args.first().and_then(osc_arg_to_f32) {
+      let entry = states.entry(channel).or_insert(ChannelState { on: false, fader: 0.0 });
+      if (entry.fader - arg).abs() > f32::EPSILON {
+        entry.fader = arg;
+        emit_state(app, channels, states, threshold);
+      }
+    }
+  }
+}
+
+#[tauri::command]
+fn stop_x32_listener(state: tauri::State<X32ListenerState>) -> Result<(), String> {
+  let handle = {
+    let mut guard = state.inner.lock().map_err(|_| "Listener lock poisoned".to_string())?;
+    guard.take()
+  };
+
+  if let Some(listener) = handle {
+    listener.stop.store(true, Ordering::Relaxed);
+    if let Some(thread) = listener.thread {
+      let _ = thread.join();
+    }
+  }
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -11,6 +262,8 @@ pub fn run() {
       }
       Ok(())
     })
+    .manage(X32ListenerState::default())
+    .invoke_handler(tauri::generate_handler![start_x32_listener, stop_x32_listener])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

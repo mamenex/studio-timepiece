@@ -4,6 +4,8 @@ import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { GripVertical, Plus } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -18,6 +20,7 @@ type RunningOrderSegment = {
   startSeconds: number | null;
   durationSeconds: number;
   type: string;
+  camera: string;
   rowIndex: number;
 };
 
@@ -34,6 +37,8 @@ type RunningOrderLayoutProps = {
   persistKey?: string;
   syncFromStorage?: boolean;
   clockSlot?: ReactNode;
+  popoutClockEnabled?: boolean;
+  onTogglePopoutClock?: (next: boolean) => void;
 };
 
 const STORAGE_VERSION = 1;
@@ -124,19 +129,34 @@ const saveToStorage = (persistKey: string | undefined, state: RunningOrderState)
   );
 };
 
-const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: RunningOrderLayoutProps) => {
+const RunningOrderLayout = ({
+  now,
+  persistKey,
+  syncFromStorage,
+  clockSlot,
+  popoutClockEnabled,
+  onTogglePopoutClock,
+}: RunningOrderLayoutProps) => {
   const [sourceName, setSourceName] = useState<string | null>(null);
   const [segments, setSegments] = useState<RunningOrderSegment[]>([]);
   const [showStartEnabled, setShowStartEnabled] = useState(false);
   const [showStartSeconds, setShowStartSeconds] = useState<number | null>(null);
   const [skippedIds, setSkippedIds] = useState<string[]>([]);
+  const [reorderEnabled, setReorderEnabled] = useState(false);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [editEnabled, setEditEnabled] = useState(false);
 
   useEffect(() => {
     if (!syncFromStorage) return;
     const stored = loadFromStorage(persistKey);
     if (stored) {
       setSourceName(stored.sourceName);
-      setSegments(stored.segments);
+      setSegments(
+        stored.segments.map((segment) => ({
+          ...segment,
+          camera: segment.camera ?? "",
+        })),
+      );
       setShowStartEnabled(stored.showStartEnabled);
       setShowStartSeconds(stored.showStartSeconds);
       setSkippedIds(stored.skippedIds);
@@ -173,6 +193,7 @@ const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: Run
       const startCell = row?.[1];
       const durationCell = row?.[2];
       const typeCell = row?.[3];
+      const cameraCell = row?.[4];
 
       if (
         (segmentNumber == null || segmentNumber === "") &&
@@ -191,6 +212,7 @@ const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: Run
         startSeconds,
         durationSeconds,
         type: typeCell ? String(typeCell) : "",
+        camera: cameraCell ? String(cameraCell) : "",
         rowIndex: i,
       });
     }
@@ -299,6 +321,49 @@ const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: Run
   const showStartValue =
     showStartSeconds != null ? formatClockTime(showStartSeconds) : formatClockTime(baseStartSeconds);
 
+  const handleAddSegment = () => {
+    setSegments((prev) => {
+      const last = prev[prev.length - 1];
+      const nextStart = last ? (last.startSeconds ?? 0) + last.durationSeconds : 0;
+      const nextIndex = prev.length + 1;
+      return [
+        ...prev,
+        {
+          id: `manual-${Date.now()}-${nextIndex}`,
+          segmentNumber: String(nextIndex),
+          startSeconds: nextStart,
+          durationSeconds: 0,
+          type: "",
+          camera: "",
+          rowIndex: nextIndex,
+        },
+      ];
+    });
+  };
+
+  const handleClearRunningOrder = () => {
+    setSourceName(null);
+    setSegments([]);
+    setSkippedIds([]);
+  };
+
+  const handleSegmentFieldChange = (segmentId: string, updater: (segment: RunningOrderSegment) => RunningOrderSegment) => {
+    setSegments((prev) => prev.map((segment) => (segment.id === segmentId ? updater(segment) : segment)));
+  };
+
+  const moveSegment = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    setSegments((prev) => {
+      const sourceIndex = prev.findIndex((segment) => segment.id === sourceId);
+      const targetIndex = prev.findIndex((segment) => segment.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  };
+
   return (
     <div className="flex h-full w-full gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-4">
@@ -332,6 +397,13 @@ const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: Run
                   {sourceName ? "Excel loaded" : "Load Excel"}
                 </span>
               </label>
+              <Button variant="outline" size="sm" onClick={handleAddSegment}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add segment
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleClearRunningOrder}>
+                Clear Excel
+              </Button>
               <Button variant="outline" size="sm" onClick={() => setSkippedIds([])}>
                 Clear skips
               </Button>
@@ -357,6 +429,16 @@ const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: Run
             <Button variant="outline" size="sm" onClick={handleSetShowStartNow}>
               Set show start to now
             </Button>
+            <div className="ml-auto flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch checked={editEnabled} onCheckedChange={setEditEnabled} />
+                <span>Edit segments</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch checked={reorderEnabled} onCheckedChange={setReorderEnabled} />
+                <span>Reorder segments</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -374,31 +456,142 @@ const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: Run
                 )}
                 {effectiveSegments.map((segment) => {
                   const isCurrent = currentSegment?.id === segment.id;
+                  const startValue = formatClockTime(segment.startSeconds ?? 0);
+                  const durationValue = formatDuration(segment.durationSeconds);
                   return (
                     <ContextMenu key={segment.id}>
                       <ContextMenuTrigger asChild>
                         <div
+                          draggable={reorderEnabled}
+                          onDragStart={(event) => {
+                            if (!reorderEnabled) return;
+                            event.dataTransfer.setData("text/plain", segment.id);
+                            setDraggingId(segment.id);
+                          }}
+                          onDragEnd={() => setDraggingId(null)}
+                          onDragOver={(event) => {
+                            if (!reorderEnabled) return;
+                            event.preventDefault();
+                          }}
+                          onDrop={(event) => {
+                            if (!reorderEnabled) return;
+                            const sourceId = event.dataTransfer.getData("text/plain");
+                            if (sourceId) moveSegment(sourceId, segment.id);
+                            setDraggingId(null);
+                          }}
                           className={`rounded-lg border px-4 py-3 transition ${
                             isCurrent
                               ? "border-primary/60 bg-primary/10"
                               : "border-border/60 bg-background/80 hover:bg-accent/40"
-                          } ${segment.isSkipped ? "opacity-50" : ""}`}
+                          } ${segment.isSkipped ? "opacity-50" : ""} ${
+                            draggingId && draggingId !== segment.id ? "border-dashed" : ""
+                          }`}
                         >
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <div className="text-sm text-muted-foreground">Segment {segment.segmentNumber}</div>
-                              <div className="text-lg font-semibold text-foreground">
-                                {segment.type || "Untitled segment"}
+                          <div className="flex flex-wrap items-start gap-3">
+                            <div className="mt-1 flex items-center gap-2">
+                              <GripVertical
+                                className={`h-4 w-4 ${reorderEnabled ? "text-muted-foreground" : "text-transparent"}`}
+                              />
+                            </div>
+                            {editEnabled ? (
+                              <div className="flex-1 space-y-3">
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                  <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                                    Segment #
+                                    <input
+                                      value={segment.segmentNumber}
+                                      onChange={(event) =>
+                                        handleSegmentFieldChange(segment.id, (prev) => ({
+                                          ...prev,
+                                          segmentNumber: event.target.value,
+                                        }))
+                                      }
+                                      className="rounded-md border border-border/60 bg-transparent px-2 py-1 text-sm text-foreground"
+                                    />
+                                  </label>
+                                  <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                                    Title
+                                    <input
+                                      value={segment.type}
+                                      onChange={(event) =>
+                                        handleSegmentFieldChange(segment.id, (prev) => ({
+                                          ...prev,
+                                          type: event.target.value,
+                                        }))
+                                      }
+                                      className="rounded-md border border-border/60 bg-transparent px-2 py-1 text-sm text-foreground"
+                                    />
+                                  </label>
+                                  <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                                    Camera
+                                    <input
+                                      value={segment.camera}
+                                      onChange={(event) =>
+                                        handleSegmentFieldChange(segment.id, (prev) => ({
+                                          ...prev,
+                                          camera: event.target.value,
+                                        }))
+                                      }
+                                      className="rounded-md border border-border/60 bg-transparent px-2 py-1 text-sm text-foreground"
+                                    />
+                                  </label>
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                                    Start
+                                    <input
+                                      type="time"
+                                      step={1}
+                                      value={startValue}
+                                      onChange={(event) => {
+                                        const parsed = parseTimeCellToSeconds(event.target.value);
+                                        handleSegmentFieldChange(segment.id, (prev) => ({
+                                          ...prev,
+                                          startSeconds: parsed ?? 0,
+                                        }));
+                                      }}
+                                      className="rounded-md border border-border/60 bg-transparent px-2 py-1 text-sm text-foreground"
+                                    />
+                                  </label>
+                                  <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                                    Duration
+                                    <input
+                                      value={durationValue}
+                                      onChange={(event) => {
+                                        const parsed = parseDurationCellToSeconds(event.target.value);
+                                        handleSegmentFieldChange(segment.id, (prev) => ({
+                                          ...prev,
+                                          durationSeconds: parsed,
+                                        }));
+                                      }}
+                                      className="rounded-md border border-border/60 bg-transparent px-2 py-1 text-sm text-foreground"
+                                    />
+                                  </label>
+                                </div>
                               </div>
-                            </div>
-                            <div className="text-right text-sm">
-                              <div className="text-muted-foreground">Start</div>
-                              <div className="font-medium text-foreground">{formatClockTime(segment.startSeconds)}</div>
-                            </div>
-                            <div className="text-right text-sm">
-                              <div className="text-muted-foreground">Duration</div>
-                              <div className="font-medium text-foreground">{formatDuration(segment.durationSeconds)}</div>
-                            </div>
+                            ) : (
+                              <div className="flex flex-1 flex-wrap items-center justify-between gap-3">
+                                <div>
+                                  <div className="text-sm text-muted-foreground">Segment {segment.segmentNumber}</div>
+                                  <div className="text-lg font-semibold text-foreground">
+                                    {segment.type || "Untitled segment"}
+                                  </div>
+                                  {segment.camera && (
+                                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                                      Camera {segment.camera}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="text-right text-sm">
+                                  <div className="text-muted-foreground">Start</div>
+                                  <div className="font-medium text-foreground">{startValue}</div>
+                                </div>
+                                <div className="text-right text-sm">
+                                  <div className="text-muted-foreground">Duration</div>
+                                  <div className="font-medium text-foreground">{durationValue}</div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                           {segment.isSkipped && (
                             <div className="mt-2 text-xs uppercase text-muted-foreground">Skipped</div>
@@ -440,6 +633,12 @@ const RunningOrderLayout = ({ now, persistKey, syncFromStorage, clockSlot }: Run
               <DigitalDisplay time={format(now, "HH:mm:ss")} className="text-4xl sm:text-5xl" />
               <div className="text-sm text-muted-foreground">{format(now, "EEEE d MMMM yyyy", { locale: sv })}</div>
             </div>
+            {typeof popoutClockEnabled === "boolean" && onTogglePopoutClock && (
+              <div className="mt-4 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>Keep clock visible when popped out</span>
+                <Switch checked={popoutClockEnabled} onCheckedChange={onTogglePopoutClock} />
+              </div>
+            )}
           </div>
         )}
 

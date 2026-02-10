@@ -3,8 +3,10 @@ import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useWindowSize } from "@/hooks/useWindowSize";
 import { useClock } from "@/hooks/useClock";
+import { useX32MicLive } from "@/hooks/useX32MicLive";
 import { Maximize, Minimize, Timer, Calendar, Plus, Minus, Type, Circle, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -23,15 +25,18 @@ import studioLogo from "@/assets/studio-logo.png";
 
 const StudioClock = () => {
   const { now: time, source: clockSource, statusLabel, lastSync, setSource: setClockSource } = useClock();
+  const { config: x32Config, setConfig: setX32Config, state: x32State, liveChannels, isTauri } = useX32MicLive();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showStopwatch, setShowStopwatch] = useState(false);
   const [showDate, setShowDate] = useState(true);
   const [showTitle, setShowTitle] = useState(true);
+  const [titleText, setTitleText] = useState("Studioklocka");
   const [showLogo, setShowLogo] = useState(true);
   const [showSecondsRing, setShowSecondsRing] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [mode, setMode] = useState<"clock" | "running-order" | "settings">("clock");
+  const [keepClockOnPopout, setKeepClockOnPopout] = useState(true);
   const { width } = useWindowSize();
 
   useEffect(() => {
@@ -87,6 +92,9 @@ const StudioClock = () => {
   const digitalStandaloneClassName = isRunningOrder
     ? "text-4xl sm:text-5xl md:text-6xl lg:text-7xl"
     : "text-6xl sm:text-7xl md:text-8xl lg:text-9xl";
+  const showMicIndicator = x32Config.enabled && x32Config.showIndicator && isTauri;
+  const micLive = x32State.anyLive;
+  const resolvedTitleText = titleText.trim().length > 0 ? titleText.trim() : "Studioklocka";
 
   const clockContent = useMemo(
     () => (
@@ -96,8 +104,20 @@ const StudioClock = () => {
       >
         {showTitle && (
           <h1 className="text-muted-foreground text-xl sm:text-2xl md:text-3xl font-light tracking-[0.4em] uppercase">
-            Studioklocka
+            {resolvedTitleText}
           </h1>
+        )}
+        {showMicIndicator && (
+          <div
+            className={`rounded-full px-4 py-1 text-xs uppercase tracking-[0.35em] ${
+              micLive
+                ? "bg-rose-500/90 text-white shadow-[0_0_14px_rgba(244,63,94,0.55)]"
+                : "bg-emerald-500/10 text-emerald-200"
+            }`}
+          >
+            {micLive ? "Mic live" : "Mics muted"}
+            {liveChannels.length > 0 ? ` • ${liveChannels.length}` : ""}
+          </div>
         )}
 
         {showSecondsRing ? (
@@ -142,12 +162,16 @@ const StudioClock = () => {
       clockSize,
       currentSecond,
       dateString,
+      liveChannels.length,
+      micLive,
+      showMicIndicator,
       showDate,
       showLogo,
       showSecondsRing,
       showStopwatch,
       showTitle,
       timeString,
+      resolvedTitleText,
       zoom,
     ],
   );
@@ -205,9 +229,22 @@ const StudioClock = () => {
               {mode === "settings" && <span className="text-xs text-muted-foreground">Active</span>}
             </DropdownMenuItem>
             <DropdownMenuItem
-              onSelect={(event) => {
+              onSelect={async (event) => {
                 event.preventDefault();
-                window.open("/running-order", "RunningOrder", "width=1280,height=720");
+                if (isTauri) {
+                  const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+                  new WebviewWindow("running-order", {
+                    url: "/running-order",
+                    title: "Running order",
+                    width: 1280,
+                    height: 720,
+                  });
+                } else {
+                  window.open("/running-order", "RunningOrder", "width=1280,height=720");
+                }
+                if (keepClockOnPopout) {
+                  setMode("clock");
+                }
               }}
               className="flex items-center gap-2"
             >
@@ -317,12 +354,18 @@ const StudioClock = () => {
               now={time}
               persistKey="studio_timepiece_running_order_v1"
               syncFromStorage
+              popoutClockEnabled={keepClockOnPopout}
+              onTogglePopoutClock={setKeepClockOnPopout}
               clockSlot={
                 <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur">
                   <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Clock</div>
                   <div className="mt-4 flex flex-col items-center">
                     <DigitalDisplay time={timeString} className="text-3xl sm:text-4xl md:text-5xl" />
                     <div className="mt-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">{dateString}</div>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>Keep clock visible when popped out</span>
+                    <Switch checked={keepClockOnPopout} onCheckedChange={setKeepClockOnPopout} />
                   </div>
                 </div>
               }
@@ -352,6 +395,77 @@ const StudioClock = () => {
             {lastSync && (
               <div className="mt-4 text-xs text-muted-foreground">Last sync: {format(lastSync, "HH:mm:ss")}</div>
             )}
+
+            <div className="mt-8 border-t border-border/60 pt-6">
+              <div className="text-lg font-semibold text-foreground">Title text</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Set a custom title for the top of the clock face.
+              </div>
+              <label className="mt-4 flex flex-col gap-1 text-sm text-muted-foreground">
+                Text
+                <input
+                  value={titleText}
+                  onChange={(event) => setTitleText(event.target.value)}
+                  className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                  placeholder="Studioklocka"
+                />
+              </label>
+              <div className="mt-2 text-xs text-muted-foreground">Leave empty to use the default title.</div>
+            </div>
+
+            <div className="mt-8 border-t border-border/60 pt-6">
+              <div className="text-lg font-semibold text-foreground">X32 mic live</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {isTauri
+                  ? x32State.status === "error"
+                    ? `Error: ${x32State.error ?? "Unable to connect"}`
+                    : x32State.status === "listening"
+                      ? "Listening for mic status"
+                      : "Disabled"
+                  : "Only available in the Tauri app"}
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Switch
+                  checked={x32Config.enabled}
+                  onCheckedChange={(value) => setX32Config({ enabled: value })}
+                />
+                <span className="text-sm text-muted-foreground">Enable mic live indicator</span>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Switch
+                  checked={x32Config.showIndicator}
+                  onCheckedChange={(value) => setX32Config({ showIndicator: value })}
+                  disabled={!x32Config.enabled}
+                />
+                <span className="text-sm text-muted-foreground">Show mic indicator on clock</span>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  X32 host
+                  <input
+                    value={x32Config.host}
+                    onChange={(event) => setX32Config({ host: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="192.168.0.100"
+                    disabled={!x32Config.enabled}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  OSC port
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={x32Config.port}
+                    onChange={(event) => setX32Config({ port: Number(event.target.value) || 0 })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="10023"
+                    disabled={!x32Config.enabled}
+                  />
+                </label>
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">Channels: 1–6 • Live = unmuted + fader above -inf</div>
+            </div>
           </div>
         </div>
       )}
