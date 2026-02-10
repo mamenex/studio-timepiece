@@ -1,73 +1,105 @@
-# Welcome to your Lovable project
+# Studioklocka (Studio Timepiece)
 
-## Project info
+Studioklocka is a studio wall clock and running-order display built with React + Tauri. It is designed for live production rooms and control rooms where a large, readable clock, clear status indicators, and a configurable running order are essential.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+**Key features**
+- Large digital clock with optional seconds ring and studio logo
+- Date display and built-in stopwatch
+- Running order view for segments and timing
+- Fullscreen mode and zoom controls for different screens
+- Optional X32 mixer mic-live indicator (desktop app only)
+- Local clock or world-time sync (with automatic fallback)
 
-## How can I edit this code?
+## Tech stack
+- Vite + React + TypeScript
+- Tailwind CSS + shadcn/ui
+- Tauri 2 for the desktop shell
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Quick start (web/dev)
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Install (macOS)
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+**Option A: Install a prebuilt app**
+1. Download the `.dmg` (or `.app`) from your release or shared build.
+2. Open the `.dmg` and drag `Studioklocka` into `Applications`.
+3. Launch the app from `Applications`.
 
-**Use GitHub Codespaces**
+**Option B: Build from source**
+1. Install Node.js (18+ recommended) and Rust.
+2. Install Xcode Command Line Tools: `xcode-select --install`.
+3. In this repo:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```sh
+npm install
+npm run tauri dev
+```
 
-## What technologies are used for this project?
+To create a signed/unsigned build:
 
-This project is built with:
+```sh
+npm run tauri build
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+To build and copy installers to the repo root in one step:
 
-## How can I deploy this project?
+```sh
+npm run tauri:build:copy
+```
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+The `.app` and installer artifacts are written to `src-tauri/target/release/bundle/`, and the current macOS build can be copied to the repo root:
 
-## Can I connect a custom domain to my Lovable project?
+- `/Users/leorehnstrom/Documents/GitHub/studio-timepiece/Studioklocka.app`
+- `/Users/leorehnstrom/Documents/GitHub/studio-timepiece/Studioklocka_0.1.0_aarch64.dmg`
 
-Yes, you can!
+## Install (Windows)
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+**Option A: Install a prebuilt app**
+1. Download the `.msi` (or `.exe`) from your release or shared build.
+2. Run the installer and follow the prompts.
+3. Launch `Studioklocka` from the Start Menu.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+**Option B: Build from source**
+1. Install Node.js (18+ recommended) and Rust.
+2. Install the “Desktop development with C++” workload in Visual Studio Build Tools (MSVC).
+3. In this repo (PowerShell or Command Prompt):
+
+```sh
+npm install
+npm run tauri dev
+```
+
+To create an installer:
+
+```sh
+npm run tauri build
+```
+
+To build and copy installers to the repo root in one step:
+
+```sh
+npm run tauri:build:copy
+```
+
+The `.msi` is written to `src-tauri/target/release/bundle/`. If you build on Windows and want the installer at the repo root, copy it to:
+
+- `/Users/leorehnstrom/Documents/GitHub/studio-timepiece/Studioklocka_*.msi`
+
+## Configuration notes
+- **World time vs local time**: toggle in the app menu. World time uses `worldtimeapi.org` and falls back to the local system clock if unavailable.
+- **X32 mic-live indicator**: available in the desktop app when Tauri is running. Configure host/port and threshold in the settings UI.
+
+## Development notes
+- Vite dev server: `npm run dev`
+- Build the web bundle: `npm run build`
+- Preview the web build: `npm run preview`
+- Tauri dev shell: `npm run tauri dev`
+- Tauri production build: `npm run tauri build`
+
+## License
+
+TBD
