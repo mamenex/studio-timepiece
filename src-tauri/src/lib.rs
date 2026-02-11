@@ -1,6 +1,9 @@
 use std::{
   collections::HashMap,
-  net::UdpSocket,
+  fs,
+  io::{Read, Write},
+  net::{Shutdown, TcpStream, UdpSocket},
+  path::{Component, Path},
   sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -249,6 +252,141 @@ fn stop_x32_listener(state: tauri::State<X32ListenerState>) -> Result<(), String
   Ok(())
 }
 
+fn sanitize_amcp_value(value: &str) -> Result<String, String> {
+  if value.chars().any(|ch| ch == '\n' || ch == '\r') {
+    return Err("AMCP values cannot contain line breaks".to_string());
+  }
+  Ok(value.trim().to_string())
+}
+
+fn escape_amcp_quoted(value: &str) -> String {
+  value.replace('\\', "\\\\").replace('\"', "\\\"")
+}
+
+fn send_amcp(host: &str, port: u16, command: &str) -> Result<String, String> {
+  let address = format!("{}:{}", host.trim(), port);
+  let mut stream = TcpStream::connect(address).map_err(|err| err.to_string())?;
+  stream
+    .set_read_timeout(Some(Duration::from_millis(1200)))
+    .map_err(|err| err.to_string())?;
+  stream
+    .set_write_timeout(Some(Duration::from_millis(1200)))
+    .map_err(|err| err.to_string())?;
+
+  let payload = format!("{}\r\n", command.trim());
+  stream.write_all(payload.as_bytes()).map_err(|err| err.to_string())?;
+  let _ = stream.shutdown(Shutdown::Write);
+
+  let mut response = String::new();
+  stream
+    .read_to_string(&mut response)
+    .map_err(|err| err.to_string())?;
+
+  let trimmed = response.trim().to_string();
+  if trimmed.is_empty() {
+    Ok("No response".to_string())
+  } else {
+    Ok(trimmed)
+  }
+}
+
+#[tauri::command]
+fn casparcg_ping(host: String, port: u16) -> Result<String, String> {
+  send_amcp(host.trim(), port, "INFO")
+}
+
+#[tauri::command]
+fn casparcg_send_amcp(host: String, port: u16, command: String) -> Result<String, String> {
+  let clean = sanitize_amcp_value(&command)?;
+  if clean.is_empty() {
+    return Err("Command is required".to_string());
+  }
+  send_amcp(host.trim(), port, &clean)
+}
+
+#[tauri::command]
+fn casparcg_play_template(
+  host: String,
+  port: u16,
+  channel: u16,
+  layer: u16,
+  template: String,
+  data: String,
+) -> Result<String, String> {
+  let clean_template = sanitize_amcp_value(&template)?;
+  if clean_template.is_empty() {
+    return Err("Template name is required".to_string());
+  }
+  let clean_data = sanitize_amcp_value(&data)?;
+  let escaped_template = escape_amcp_quoted(&clean_template);
+  let escaped_data = escape_amcp_quoted(&clean_data);
+  let command = if clean_data.is_empty() {
+    format!("CG {}-{} ADD 1 \"{}\" 1", channel, layer, escaped_template)
+  } else {
+    format!("CG {}-{} ADD 1 \"{}\" 1 \"{}\"", channel, layer, escaped_template, escaped_data)
+  };
+  send_amcp(host.trim(), port, &command)
+}
+
+#[tauri::command]
+fn casparcg_update_template(
+  host: String,
+  port: u16,
+  channel: u16,
+  layer: u16,
+  data: String,
+) -> Result<String, String> {
+  let clean_data = sanitize_amcp_value(&data)?;
+  let escaped_data = escape_amcp_quoted(&clean_data);
+  let command = format!("CG {}-{} UPDATE 1 \"{}\"", channel, layer, escaped_data);
+  send_amcp(host.trim(), port, &command)
+}
+
+#[tauri::command]
+fn casparcg_stop_template(host: String, port: u16, channel: u16, layer: u16) -> Result<String, String> {
+  let command = format!("CG {}-{} STOP 1", channel, layer);
+  send_amcp(host.trim(), port, &command)
+}
+
+fn validate_relative_template_path(path: &str) -> Result<String, String> {
+  let normalized = path.trim().replace('\\', "/");
+  if normalized.is_empty() {
+    return Err("Template file name is required".to_string());
+  }
+  let candidate = Path::new(&normalized);
+  for component in candidate.components() {
+    match component {
+      Component::Prefix(_) | Component::RootDir | Component::ParentDir => {
+        return Err("Template file path must be relative to template root".to_string())
+      }
+      _ => {}
+    }
+  }
+  Ok(normalized)
+}
+
+#[tauri::command]
+fn casparcg_write_template_file(
+  template_root: String,
+  relative_path: String,
+  content: String,
+) -> Result<String, String> {
+  let root = template_root.trim();
+  if root.is_empty() {
+    return Err("Template root path is required".to_string());
+  }
+
+  let safe_relative = validate_relative_template_path(&relative_path)?;
+  let target = Path::new(root).join(safe_relative);
+
+  if let Some(parent) = target.parent() {
+    fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+  }
+
+  fs::write(&target, content).map_err(|err| err.to_string())?;
+  Ok(format!("Wrote {}", target.display()))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -264,7 +402,16 @@ pub fn run() {
     })
     .plugin(tauri_plugin_updater::Builder::new().build())
     .manage(X32ListenerState::default())
-    .invoke_handler(tauri::generate_handler![start_x32_listener, stop_x32_listener])
+    .invoke_handler(tauri::generate_handler![
+      start_x32_listener,
+      stop_x32_listener,
+      casparcg_ping,
+      casparcg_send_amcp,
+      casparcg_play_template,
+      casparcg_update_template,
+      casparcg_stop_template,
+      casparcg_write_template_file
+    ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

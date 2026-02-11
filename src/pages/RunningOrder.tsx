@@ -1,5 +1,6 @@
 import { useClock } from "@/hooks/useClock";
 import { useTriCasterDdr } from "@/hooks/useTriCasterDdr";
+import { useCasparCg } from "@/hooks/useCasparCg";
 import RunningOrderLayout from "@/components/clock/RunningOrderLayout";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,13 @@ import DdrCountdown from "@/components/clock/DdrCountdown";
 const RunningOrder = () => {
   const { now: time } = useClock();
   const { config: tricasterConfig, countdown: tricasterCountdown } = useTriCasterDdr();
+  const {
+    config: casparConfig,
+    isTauri,
+    playTemplateWith: playCasparTemplateWith,
+    updateTemplateWith: updateCasparTemplateWith,
+    stopTemplate: stopCasparTemplate,
+  } = useCasparCg();
   const showTricasterCountdown = tricasterConfig.enabled && tricasterConfig.showCountdown;
 
   return (
@@ -17,6 +25,12 @@ const RunningOrder = () => {
           now={time}
           persistKey="studio_timepiece_running_order_v1"
           syncFromStorage
+          casparControls={{
+            available: isTauri && casparConfig.enabled,
+            playTemplate: (template, data) => playCasparTemplateWith(template, data),
+            updateTemplate: (data) => updateCasparTemplateWith(data),
+            stopTemplate: () => stopCasparTemplate(),
+          }}
           ddrCountdownSlot={
             showTricasterCountdown ? (
               <DdrCountdown

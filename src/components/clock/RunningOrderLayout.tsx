@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as XLSX from "xlsx";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { GripVertical, Plus } from "lucide-react";
+import { GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -21,6 +21,8 @@ type RunningOrderSegment = {
   durationSeconds: number;
   type: string;
   camera: string;
+  casparTemplate: string;
+  casparData: string;
   rowIndex: number;
 };
 
@@ -30,6 +32,22 @@ type RunningOrderState = {
   showStartEnabled: boolean;
   showStartSeconds: number | null;
   skippedIds: string[];
+  casparAutoPlayEnabled: boolean;
+  shotboxItems: ShotboxItem[];
+};
+
+type CasparControls = {
+  available: boolean;
+  playTemplate: (template: string, data: string) => Promise<unknown> | unknown;
+  updateTemplate: (data: string) => Promise<unknown> | unknown;
+  stopTemplate: () => Promise<unknown> | unknown;
+};
+
+type ShotboxItem = {
+  id: string;
+  label: string;
+  template: string;
+  data: string;
 };
 
 type RunningOrderLayoutProps = {
@@ -40,6 +58,7 @@ type RunningOrderLayoutProps = {
   ddrCountdownSlot?: ReactNode;
   popoutClockEnabled?: boolean;
   onTogglePopoutClock?: (next: boolean) => void;
+  casparControls?: CasparControls;
 };
 
 const STORAGE_VERSION = 1;
@@ -138,6 +157,7 @@ const RunningOrderLayout = ({
   ddrCountdownSlot,
   popoutClockEnabled,
   onTogglePopoutClock,
+  casparControls,
 }: RunningOrderLayoutProps) => {
   const [sourceName, setSourceName] = useState<string | null>(null);
   const [segments, setSegments] = useState<RunningOrderSegment[]>([]);
@@ -147,6 +167,10 @@ const RunningOrderLayout = ({
   const [reorderEnabled, setReorderEnabled] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [editEnabled, setEditEnabled] = useState(false);
+  const [casparAutoPlayEnabled, setCasparAutoPlayEnabled] = useState(false);
+  const [shotboxEditEnabled, setShotboxEditEnabled] = useState(false);
+  const [shotboxItems, setShotboxItems] = useState<ShotboxItem[]>([]);
+  const previousAutoSegmentId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!syncFromStorage) return;
@@ -157,29 +181,59 @@ const RunningOrderLayout = ({
         stored.segments.map((segment) => ({
           ...segment,
           camera: segment.camera ?? "",
+          casparTemplate: segment.casparTemplate ?? "",
+          casparData: segment.casparData ?? "",
         })),
       );
       setShowStartEnabled(stored.showStartEnabled);
       setShowStartSeconds(stored.showStartSeconds);
       setSkippedIds(stored.skippedIds);
+      setCasparAutoPlayEnabled(stored.casparAutoPlayEnabled ?? false);
+      setShotboxItems(stored.shotboxItems ?? []);
     }
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== persistKey || !event.newValue) return;
       const parsed = loadFromStorage(persistKey);
       if (!parsed) return;
       setSourceName(parsed.sourceName);
-      setSegments(parsed.segments);
+      setSegments(
+        parsed.segments.map((segment) => ({
+          ...segment,
+          camera: segment.camera ?? "",
+          casparTemplate: segment.casparTemplate ?? "",
+          casparData: segment.casparData ?? "",
+        })),
+      );
       setShowStartEnabled(parsed.showStartEnabled);
       setShowStartSeconds(parsed.showStartSeconds);
       setSkippedIds(parsed.skippedIds);
+      setCasparAutoPlayEnabled(parsed.casparAutoPlayEnabled ?? false);
+      setShotboxItems(parsed.shotboxItems ?? []);
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, [persistKey, syncFromStorage]);
 
   useEffect(() => {
-    saveToStorage(persistKey, { sourceName, segments, showStartEnabled, showStartSeconds, skippedIds });
-  }, [persistKey, sourceName, segments, showStartEnabled, showStartSeconds, skippedIds]);
+    saveToStorage(persistKey, {
+      sourceName,
+      segments,
+      showStartEnabled,
+      showStartSeconds,
+      skippedIds,
+      casparAutoPlayEnabled,
+      shotboxItems,
+    });
+  }, [
+    persistKey,
+    sourceName,
+    segments,
+    showStartEnabled,
+    showStartSeconds,
+    skippedIds,
+    casparAutoPlayEnabled,
+    shotboxItems,
+  ]);
 
   const handleFileUpload = useCallback(async (file: File) => {
     const buffer = await file.arrayBuffer();
@@ -196,6 +250,8 @@ const RunningOrderLayout = ({
       const durationCell = row?.[2];
       const typeCell = row?.[3];
       const cameraCell = row?.[4];
+      const casparTemplateCell = row?.[5];
+      const casparDataCell = row?.[6];
 
       if (
         (segmentNumber == null || segmentNumber === "") &&
@@ -215,6 +271,8 @@ const RunningOrderLayout = ({
         durationSeconds,
         type: typeCell ? String(typeCell) : "",
         camera: cameraCell ? String(cameraCell) : "",
+        casparTemplate: casparTemplateCell ? String(casparTemplateCell) : "",
+        casparData: casparDataCell ? String(casparDataCell) : "",
         rowIndex: i,
       });
     }
@@ -280,6 +338,25 @@ const RunningOrderLayout = ({
       ? Math.min(100, ((nowSeconds - currentSegment.startSeconds) / currentSegment.durationSeconds) * 100)
       : 0;
 
+  useEffect(() => {
+    if (!casparControls?.available || !casparAutoPlayEnabled) {
+      previousAutoSegmentId.current = currentSegment?.id ?? null;
+      return;
+    }
+    const segmentId = currentSegment?.id ?? null;
+    if (!segmentId || segmentId === previousAutoSegmentId.current) return;
+    previousAutoSegmentId.current = segmentId;
+    const template = currentSegment?.casparTemplate?.trim() ?? "";
+    if (!template) return;
+    void casparControls.playTemplate(template, currentSegment?.casparData ?? "");
+  }, [
+    casparAutoPlayEnabled,
+    casparControls,
+    currentSegment?.id,
+    currentSegment?.casparData,
+    currentSegment?.casparTemplate,
+  ]);
+
   const handleToggleSkip = (segmentId: string) => {
     setSkippedIds((prev) =>
       prev.includes(segmentId) ? prev.filter((id) => id !== segmentId) : [...prev, segmentId],
@@ -337,6 +414,8 @@ const RunningOrderLayout = ({
           durationSeconds: 0,
           type: "",
           camera: "",
+          casparTemplate: "",
+          casparData: "",
           rowIndex: nextIndex,
         },
       ];
@@ -364,6 +443,26 @@ const RunningOrderLayout = ({
       next.splice(targetIndex, 0, moved);
       return next;
     });
+  };
+
+  const addShotboxItem = () => {
+    setShotboxItems((prev) => [
+      ...prev,
+      {
+        id: `shot-${Date.now()}-${prev.length + 1}`,
+        label: `Shot ${prev.length + 1}`,
+        template: "",
+        data: "{}",
+      },
+    ]);
+  };
+
+  const removeShotboxItem = (itemId: string) => {
+    setShotboxItems((prev) => prev.filter((item) => item.id !== itemId));
+  };
+
+  const updateShotboxItem = (itemId: string, updater: (item: ShotboxItem) => ShotboxItem) => {
+    setShotboxItems((prev) => prev.map((item) => (item.id === itemId ? updater(item) : item)));
   };
 
   return (
@@ -432,6 +531,16 @@ const RunningOrderLayout = ({
               Set show start to now
             </Button>
             <div className="ml-auto flex flex-wrap items-center gap-4">
+              {casparControls && (
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={casparAutoPlayEnabled}
+                    onCheckedChange={setCasparAutoPlayEnabled}
+                    disabled={!casparControls.available}
+                  />
+                  <span>Auto-play Caspar</span>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <Switch checked={editEnabled} onCheckedChange={setEditEnabled} />
                 <span>Edit segments</span>
@@ -570,6 +679,38 @@ const RunningOrderLayout = ({
                                     />
                                   </label>
                                 </div>
+                                {casparControls && (
+                                  <div className="grid gap-3 sm:grid-cols-2">
+                                    <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                                      Caspar template
+                                      <input
+                                        value={segment.casparTemplate}
+                                        onChange={(event) =>
+                                          handleSegmentFieldChange(segment.id, (prev) => ({
+                                            ...prev,
+                                            casparTemplate: event.target.value,
+                                          }))
+                                        }
+                                        className="rounded-md border border-border/60 bg-transparent px-2 py-1 text-sm text-foreground"
+                                        placeholder="lower_third"
+                                      />
+                                    </label>
+                                    <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                                      Caspar data
+                                      <input
+                                        value={segment.casparData}
+                                        onChange={(event) =>
+                                          handleSegmentFieldChange(segment.id, (prev) => ({
+                                            ...prev,
+                                            casparData: event.target.value,
+                                          }))
+                                        }
+                                        className="rounded-md border border-border/60 bg-transparent px-2 py-1 text-sm text-foreground"
+                                        placeholder='{"f0":"Headline"}'
+                                      />
+                                    </label>
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <div className="flex flex-1 flex-wrap items-center justify-between gap-3">
@@ -583,6 +724,11 @@ const RunningOrderLayout = ({
                                       Camera {segment.camera}
                                     </div>
                                   )}
+                                  {segment.casparTemplate && (
+                                    <div className="mt-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                                      Caspar: {segment.casparTemplate}
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="text-right text-sm">
                                   <div className="text-muted-foreground">Start</div>
@@ -592,6 +738,38 @@ const RunningOrderLayout = ({
                                   <div className="text-muted-foreground">Duration</div>
                                   <div className="font-medium text-foreground">{durationValue}</div>
                                 </div>
+                                {casparControls && (
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={() =>
+                                        casparControls.playTemplate(
+                                          segment.casparTemplate,
+                                          segment.casparData ?? "",
+                                        )
+                                      }
+                                      disabled={!casparControls.available || !segment.casparTemplate.trim()}
+                                    >
+                                      Play CG
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => casparControls.updateTemplate(segment.casparData ?? "")}
+                                      disabled={!casparControls.available || !segment.casparTemplate.trim()}
+                                    >
+                                      Update
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      onClick={() => casparControls.stopTemplate()}
+                                      disabled={!casparControls.available}
+                                    >
+                                      Stop
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -702,6 +880,119 @@ const RunningOrderLayout = ({
             </Button>
           </div>
         </div>
+
+        {casparControls && (
+          <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur">
+            <div className="flex items-center justify-between">
+              <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">CasparCG Shotbox</div>
+              <Button
+                size="icon"
+                variant={shotboxEditEnabled ? "default" : "ghost"}
+                onClick={() => setShotboxEditEnabled((prev) => !prev)}
+                title={shotboxEditEnabled ? "Done editing shotbox" : "Edit shotbox"}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </div>
+            {shotboxItems.length === 0 ? (
+              <div className="mt-3 text-sm text-muted-foreground">
+                No shotbox items yet.
+                {shotboxEditEnabled ? " Click Add shot to create one." : ""}
+              </div>
+            ) : (
+              <div className="mt-3 space-y-3">
+                {shotboxItems.map((item) => (
+                  <div key={item.id} className="rounded-md border border-border/60 bg-background/70 p-3">
+                    {shotboxEditEnabled ? (
+                      <div className="space-y-2">
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                            Label
+                            <input
+                              value={item.label}
+                              onChange={(event) =>
+                                updateShotboxItem(item.id, (prev) => ({ ...prev, label: event.target.value }))
+                              }
+                              className="rounded-md border border-border/60 bg-transparent px-2 py-1 text-sm text-foreground"
+                              placeholder="Name tag"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                            Template
+                            <input
+                              value={item.template}
+                              onChange={(event) =>
+                                updateShotboxItem(item.id, (prev) => ({ ...prev, template: event.target.value }))
+                              }
+                              className="rounded-md border border-border/60 bg-transparent px-2 py-1 text-sm text-foreground"
+                              placeholder="lower_third"
+                            />
+                          </label>
+                        </div>
+                        <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                          Data
+                          <input
+                            value={item.data}
+                            onChange={(event) =>
+                              updateShotboxItem(item.id, (prev) => ({ ...prev, data: event.target.value }))
+                            }
+                            className="rounded-md border border-border/60 bg-transparent px-2 py-1 text-sm text-foreground"
+                            placeholder='{"f0":"Headline"}'
+                          />
+                        </label>
+                        <div className="flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => removeShotboxItem(item.id)}
+                            className="text-muted-foreground"
+                          >
+                            <Trash2 className="mr-1 h-4 w-4" />
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-foreground">{item.label || "Untitled"}</div>
+                          <div className="truncate text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                            {item.template || "No template set"}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => casparControls.playTemplate(item.template, item.data)}
+                            disabled={!casparControls.available || !item.template.trim()}
+                          >
+                            Play
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => casparControls.stopTemplate()}
+                            disabled={!casparControls.available}
+                          >
+                            Stop
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {shotboxEditEnabled && (
+              <div className="mt-3">
+                <Button size="sm" variant="outline" onClick={addShotboxItem}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add shot
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

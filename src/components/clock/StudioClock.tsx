@@ -4,6 +4,7 @@ import { sv } from "date-fns/locale";
 import { useWindowSize } from "@/hooks/useWindowSize";
 import { useClock } from "@/hooks/useClock";
 import { useX32MicLive } from "@/hooks/useX32MicLive";
+import { useCasparCg } from "@/hooks/useCasparCg";
 import { useTriCasterDdr } from "@/hooks/useTriCasterDdr";
 import { useTriCasterRecording } from "@/hooks/useTriCasterRecording";
 import { Maximize, Minimize, Timer, Calendar, Plus, Minus, Type, Circle, ChevronDown } from "lucide-react";
@@ -69,6 +70,18 @@ const StudioClock = () => {
   const { now: time, source: clockSource, statusLabel, lastSync, setSource: setClockSource } = useClock();
   const { config: x32Config, setConfig: setX32Config, state: x32State, liveChannels, isTauri } = useX32MicLive();
   const {
+    config: casparConfig,
+    setConfig: setCasparConfig,
+    state: casparState,
+    ping: pingCaspar,
+    playTemplate: playCasparTemplate,
+    playTemplateWith: playCasparTemplateWith,
+    updateTemplateWith: updateCasparTemplateWith,
+    updateTemplate: updateCasparTemplate,
+    stopTemplate: stopCasparTemplate,
+    uploadTemplateFile: uploadCasparTemplateFile,
+  } = useCasparCg();
+  const {
     config: tricasterConfig,
     setConfig: setTricasterConfig,
     state: tricasterState,
@@ -100,6 +113,7 @@ const StudioClock = () => {
   >("idle");
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const [availableUpdate, setAvailableUpdate] = useState<any | null>(null);
+  const [casparUploadPath, setCasparUploadPath] = useState("");
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -586,6 +600,12 @@ const StudioClock = () => {
               now={time}
               persistKey="studio_timepiece_running_order_v1"
               syncFromStorage
+              casparControls={{
+                available: isTauri && casparConfig.enabled,
+                playTemplate: (template, data) => playCasparTemplateWith(template, data),
+                updateTemplate: (data) => updateCasparTemplateWith(data),
+                stopTemplate: () => stopCasparTemplate(),
+              }}
               popoutClockEnabled={keepClockOnPopout}
               onTogglePopoutClock={setKeepClockOnPopout}
               ddrCountdownSlot={
@@ -754,6 +774,190 @@ const StudioClock = () => {
                     Logo is stored locally on this device.
                   </span>
                 </div>
+              </div>
+            </div>
+
+            <div className="mt-8 border-t border-border/60 pt-6">
+              <div className="text-lg font-semibold text-foreground">CasparCG graphics playout</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {isTauri
+                  ? casparConfig.enabled
+                    ? casparState.status === "error"
+                      ? `Error: ${casparState.error ?? "Unable to connect"}`
+                      : "Ready to send AMCP commands"
+                    : "Disabled"
+                  : "Only available in the Tauri app"}
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Switch
+                  checked={casparConfig.enabled}
+                  onCheckedChange={(value) => setCasparConfig({ enabled: value })}
+                />
+                <span className="text-sm text-muted-foreground">Enable CasparCG control</span>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  CasparCG host
+                  <input
+                    value={casparConfig.host}
+                    onChange={(event) => setCasparConfig({ host: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="127.0.0.1"
+                    disabled={!casparConfig.enabled}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  AMCP port
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={casparConfig.port}
+                    onChange={(event) => setCasparConfig({ port: Number(event.target.value) || 0 })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="5250"
+                    disabled={!casparConfig.enabled}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Channel
+                  <input
+                    type="number"
+                    min={1}
+                    max={9999}
+                    value={casparConfig.channel}
+                    onChange={(event) => setCasparConfig({ channel: Number(event.target.value) || 1 })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="1"
+                    disabled={!casparConfig.enabled}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Layer
+                  <input
+                    type="number"
+                    min={0}
+                    max={9999}
+                    value={casparConfig.layer}
+                    onChange={(event) => setCasparConfig({ layer: Number(event.target.value) || 0 })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="20"
+                    disabled={!casparConfig.enabled}
+                  />
+                </label>
+              </div>
+              <div className="mt-3">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Template name
+                  <input
+                    value={casparConfig.template}
+                    onChange={(event) => setCasparConfig({ template: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="my_lower_third"
+                    disabled={!casparConfig.enabled}
+                  />
+                </label>
+              </div>
+              <div className="mt-3">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Template data (JSON/XML string)
+                  <textarea
+                    value={casparConfig.data}
+                    onChange={(event) => setCasparConfig({ data: event.target.value })}
+                    className="min-h-20 rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder='{"f0":"Headline","f1":"Name"}'
+                    disabled={!casparConfig.enabled}
+                  />
+                </label>
+              </div>
+              <div className="mt-3">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Local template root path
+                  <input
+                    value={casparConfig.templateRootPath}
+                    onChange={(event) => setCasparConfig({ templateRootPath: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="/path/to/CasparCG/server/template"
+                    disabled={!casparConfig.enabled}
+                  />
+                </label>
+              </div>
+              <div className="mt-3">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Upload target file name (optional)
+                  <input
+                    value={casparUploadPath}
+                    onChange={(event) => setCasparUploadPath(event.target.value)}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="news/lower_third.html"
+                    disabled={!casparConfig.enabled}
+                  />
+                </label>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  If empty, the selected file name is used.
+                </div>
+              </div>
+              <div className="mt-3">
+                <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="file"
+                    accept=".html,.htm,.json,.js,.css,.xml,.ft"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = async () => {
+                        const result = typeof reader.result === "string" ? reader.result : null;
+                        if (result == null) return;
+                        const relativePath = casparUploadPath.trim() || file.name;
+                        await uploadCasparTemplateFile(relativePath, result);
+                      };
+                      reader.readAsText(file);
+                      event.currentTarget.value = "";
+                    }}
+                    disabled={!casparConfig.enabled || !isTauri}
+                  />
+                  <span className="rounded-md border border-border/60 px-3 py-2 text-sm font-medium shadow-sm">
+                    Add template file
+                  </span>
+                </label>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Button type="button" variant="outline" onClick={pingCaspar} disabled={!casparConfig.enabled || !isTauri}>
+                  Test connection
+                </Button>
+                <Button type="button" onClick={playCasparTemplate} disabled={!casparConfig.enabled || !isTauri}>
+                  Play template
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={updateCasparTemplate}
+                  disabled={!casparConfig.enabled || !isTauri}
+                >
+                  Update template
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={stopCasparTemplate}
+                  disabled={!casparConfig.enabled || !isTauri}
+                >
+                  Stop template
+                </Button>
+              </div>
+              {casparState.lastResponse && (
+                <div className="mt-2 text-xs text-muted-foreground">CasparCG response: {casparState.lastResponse}</div>
+              )}
+              <div className="mt-2 text-xs text-muted-foreground">
+                Uses AMCP over TCP. Make sure your local CasparCG server is running and reachable on the configured host
+                and port.
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Template upload writes files to the local template root path from this app process.
               </div>
             </div>
 
