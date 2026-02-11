@@ -53,8 +53,8 @@ npm run tauri:build:copy
 
 The `.app` and installer artifacts are written to `src-tauri/target/release/bundle/`, and the current macOS build can be copied to the repo root:
 
-- `/Users/leorehnstrom/Documents/GitHub/studio-timepiece/Studioklocka.app`
-- `/Users/leorehnstrom/Documents/GitHub/studio-timepiece/Studioklocka_0.1.0_aarch64.dmg`
+- `./Studioklocka.app`
+- `./Studioklocka_0.1.0_aarch64.dmg`
 
 ## Install (Windows)
 
@@ -123,7 +123,7 @@ npm run tauri:build:copy
 
 The `.msi` is written to `src-tauri/target/release/bundle/`. If you build on Windows and want the installer at the repo root, copy it to:
 
-- `/Users/leorehnstrom/Documents/GitHub/studio-timepiece/Studioklocka_*.msi`
+- `./Studioklocka_*.msi`
 
 ## Configuration notes
 - **World time vs local time**: toggle in the app menu. World time uses `worldtimeapi.org` and falls back to the local system clock if unavailable.
