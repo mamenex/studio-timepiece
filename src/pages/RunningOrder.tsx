@@ -16,6 +16,7 @@ const RunningOrder = () => {
     updateTemplateWith: updateCasparTemplateWith,
     stopTemplate: stopCasparTemplate,
   } = useCasparCg();
+  const casparRunningOrderEnabled = isTauri && casparConfig.enabled;
   const showTricasterCountdown = tricasterConfig.enabled && tricasterConfig.showCountdown;
 
   return (
@@ -25,12 +26,16 @@ const RunningOrder = () => {
           now={time}
           persistKey="studio_timepiece_running_order_v1"
           syncFromStorage
-          casparControls={{
-            available: isTauri && casparConfig.enabled,
-            playTemplate: (template, data) => playCasparTemplateWith(template, data),
-            updateTemplate: (data) => updateCasparTemplateWith(data),
-            stopTemplate: () => stopCasparTemplate(),
-          }}
+          casparControls={
+            casparRunningOrderEnabled
+              ? {
+                  available: true,
+                  playTemplate: (template, data) => playCasparTemplateWith(template, data),
+                  updateTemplate: (data) => updateCasparTemplateWith(data),
+                  stopTemplate: () => stopCasparTemplate(),
+                }
+              : undefined
+          }
           ddrCountdownSlot={
             showTricasterCountdown ? (
               <DdrCountdown

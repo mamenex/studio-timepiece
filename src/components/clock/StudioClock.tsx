@@ -284,6 +284,7 @@ const StudioClock = () => {
     : "text-6xl sm:text-7xl md:text-8xl lg:text-9xl";
   const showMicIndicator = x32Config.enabled && x32Config.showIndicator && isTauri;
   const micLive = x32State.anyLive;
+  const casparRunningOrderEnabled = isTauri && casparConfig.enabled;
   const resolvedTitleText = titleText.trim().length > 0 ? titleText.trim() : "Studioklocka";
   const showTricasterCountdown = tricasterConfig.enabled && tricasterConfig.showCountdown;
   const showTricasterRecording = tricasterRecordConfig.enabled && tricasterRecordConfig.showIndicator;
@@ -600,12 +601,16 @@ const StudioClock = () => {
               now={time}
               persistKey="studio_timepiece_running_order_v1"
               syncFromStorage
-              casparControls={{
-                available: isTauri && casparConfig.enabled,
-                playTemplate: (template, data) => playCasparTemplateWith(template, data),
-                updateTemplate: (data) => updateCasparTemplateWith(data),
-                stopTemplate: () => stopCasparTemplate(),
-              }}
+              casparControls={
+                casparRunningOrderEnabled
+                  ? {
+                      available: true,
+                      playTemplate: (template, data) => playCasparTemplateWith(template, data),
+                      updateTemplate: (data) => updateCasparTemplateWith(data),
+                      stopTemplate: () => stopCasparTemplate(),
+                    }
+                  : undefined
+              }
               popoutClockEnabled={keepClockOnPopout}
               onTogglePopoutClock={setKeepClockOnPopout}
               ddrCountdownSlot={
