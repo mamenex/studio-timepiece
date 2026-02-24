@@ -1,10 +1,11 @@
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 type DdrCountdownProps = {
   label: string;
   seconds: number | null;
   active: boolean;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
   className?: string;
 };
 
@@ -23,17 +24,28 @@ const sizeClasses: Record<NonNullable<DdrCountdownProps["size"]>, { label: strin
   sm: { label: "text-[10px] tracking-[0.25em]", value: "text-xl sm:text-2xl" },
   md: { label: "text-xs tracking-[0.3em]", value: "text-3xl sm:text-4xl" },
   lg: { label: "text-xs sm:text-sm tracking-[0.35em]", value: "text-4xl sm:text-5xl" },
+  xl: { label: "text-sm sm:text-base tracking-[0.35em]", value: "text-5xl sm:text-6xl" },
 };
 
 const DdrCountdown = ({ label, seconds, active, size = "md", className }: DdrCountdownProps) => {
   const styles = sizeClasses[size];
   const displayValue = seconds != null ? formatDuration(seconds) : "--:--";
+  const [lastActiveValue, setLastActiveValue] = useState(displayValue);
+  useEffect(() => {
+    if (active && seconds != null) {
+      setLastActiveValue(formatDuration(seconds));
+    }
+  }, [active, seconds]);
+
+  const shownValue = active ? displayValue : lastActiveValue;
   const isCritical = seconds != null && Math.floor(seconds) <= 10;
 
   return (
     <div
       className={cn(
-        "flex min-w-[120px] flex-col items-center justify-center rounded-xl border px-3 py-2 text-center shadow-sm backdrop-blur transition-colors duration-200",
+        "flex min-w-[120px] flex-col items-center justify-center rounded-xl border px-3 py-2 text-center shadow-sm backdrop-blur transition-colors transition-opacity duration-500",
+        size === "lg" ? "scale-[1.56]" : "",
+        size === "xl" ? "scale-[2.15]" : "",
         isCritical ? "border-red-300 bg-red-700" : "border-border/60 bg-card/70",
         active ? "opacity-100" : "opacity-0 pointer-events-none",
         className,
@@ -41,7 +53,7 @@ const DdrCountdown = ({ label, seconds, active, size = "md", className }: DdrCou
     >
       <div className={cn("uppercase", isCritical ? "text-red-100" : "text-muted-foreground", styles.label)}>{label}</div>
       <div className={cn("mt-1 font-semibold tabular-nums", isCritical ? "text-white" : "text-foreground", styles.value)}>
-        {displayValue}
+        {shownValue}
       </div>
     </div>
   );

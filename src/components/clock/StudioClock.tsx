@@ -27,6 +27,12 @@ import DdrCountdown from "./DdrCountdown";
 import ErrorBoundary from "@/components/ErrorBoundary";
 const LOGO_STORAGE_KEY = "studio_timepiece_logo_v1";
 const LOGO_INVERT_KEY = "studio_timepiece_logo_invert_v1";
+const LAYOUT_STORAGE_KEY = "studio_timepiece_layout_v4";
+const WATCHFACE_STORAGE_KEY = "studio_timepiece_watchface_v1";
+const RED_FACE_CLOCK_OFFSET_DEFAULT = 0;
+const RED_FACE_DDR_OFFSET_DEFAULT = 42;
+const RED_FACE_CENTER_CORRECTION_X = -42;
+const RED_FACE_ADORNMENT_CORRECTION_X = 42;
 
 const checkLogoIsDark = (dataUrl: string): Promise<boolean> =>
   new Promise((resolve) => {
@@ -103,6 +109,11 @@ const StudioClock = () => {
   const [logoIsDark, setLogoIsDark] = useState(false);
   const [showSecondsRing, setShowSecondsRing] = useState(true);
   const [zoom, setZoom] = useState(1);
+  const [layoutOffsetX, setLayoutOffsetX] = useState(0);
+  const [ddrGap, setDdrGap] = useState(56);
+  const [redFaceClockOffsetX, setRedFaceClockOffsetX] = useState(RED_FACE_CLOCK_OFFSET_DEFAULT);
+  const [redFaceDdrOffsetX, setRedFaceDdrOffsetX] = useState(RED_FACE_DDR_OFFSET_DEFAULT);
+  const [watchface, setWatchface] = useState<"classic" | "red-stack">("classic");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [mode, setMode] = useState<"clock" | "running-order" | "settings">("clock");
   const [keepClockOnPopout, setKeepClockOnPopout] = useState(true);
@@ -136,6 +147,50 @@ const StudioClock = () => {
       if (storedInvert != null) {
         setInvertLogo(storedInvert === "true");
       }
+      const storedLayout = window.localStorage.getItem(LAYOUT_STORAGE_KEY);
+      if (storedLayout) {
+        const parsed = JSON.parse(storedLayout) as Partial<{
+          zoom: number;
+          offsetX: number;
+          ddrGap: number;
+          redFaceClockOffsetX: number;
+          redFaceDdrOffsetX: number;
+          redFaceOffsetX: number;
+        }>;
+        if (typeof parsed.zoom === "number" && Number.isFinite(parsed.zoom)) {
+          setZoom(Math.min(2.5, Math.max(0.3, parsed.zoom)));
+        }
+        if (typeof parsed.offsetX === "number" && Number.isFinite(parsed.offsetX)) {
+          setLayoutOffsetX(Math.min(600, Math.max(-600, parsed.offsetX)));
+        }
+        if (typeof parsed.ddrGap === "number" && Number.isFinite(parsed.ddrGap)) {
+          setDdrGap(Math.min(320, Math.max(0, parsed.ddrGap)));
+        }
+        const hasClockOffset = typeof parsed.redFaceClockOffsetX === "number" && Number.isFinite(parsed.redFaceClockOffsetX);
+        const hasLegacyOffset = typeof parsed.redFaceOffsetX === "number" && Number.isFinite(parsed.redFaceOffsetX);
+        const hasDdrOffset = typeof parsed.redFaceDdrOffsetX === "number" && Number.isFinite(parsed.redFaceDdrOffsetX);
+        const parsedClockOffset = hasClockOffset
+          ? parsed.redFaceClockOffsetX
+          : hasLegacyOffset
+            ? parsed.redFaceOffsetX
+            : RED_FACE_CLOCK_OFFSET_DEFAULT;
+        const parsedDdrOffset = hasDdrOffset ? parsed.redFaceDdrOffsetX : RED_FACE_DDR_OFFSET_DEFAULT;
+        const isPreviousDefaultPair =
+          (parsedClockOffset === -40 && parsedDdrOffset === 18) ||
+          (parsedClockOffset === -72 && parsedDdrOffset === 64) ||
+          (parsedClockOffset === -34 && parsedDdrOffset === 80) ||
+          (parsedClockOffset === 0 && parsedDdrOffset === 0);
+        setRedFaceClockOffsetX(
+          Math.min(160, Math.max(-160, isPreviousDefaultPair ? RED_FACE_CLOCK_OFFSET_DEFAULT : parsedClockOffset)),
+        );
+        setRedFaceDdrOffsetX(
+          Math.min(160, Math.max(-160, isPreviousDefaultPair ? RED_FACE_DDR_OFFSET_DEFAULT : parsedDdrOffset)),
+        );
+      }
+      const storedWatchface = window.localStorage.getItem(WATCHFACE_STORAGE_KEY);
+      if (storedWatchface === "classic" || storedWatchface === "red-stack") {
+        setWatchface(storedWatchface);
+      }
     } catch {
       // ignore storage errors
     }
@@ -162,6 +217,33 @@ const StudioClock = () => {
       // ignore storage errors
     }
   }, [invertLogo]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        LAYOUT_STORAGE_KEY,
+        JSON.stringify({
+          zoom,
+          offsetX: layoutOffsetX,
+          ddrGap,
+          redFaceClockOffsetX,
+          redFaceDdrOffsetX,
+        }),
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }, [ddrGap, layoutOffsetX, redFaceClockOffsetX, redFaceDdrOffsetX, zoom]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(WATCHFACE_STORAGE_KEY, watchface);
+    } catch {
+      // ignore storage errors
+    }
+  }, [watchface]);
 
   useEffect(() => {
     let cancelled = false;
@@ -225,11 +307,11 @@ const StudioClock = () => {
   };
 
   const handleZoomIn = () => {
-    setZoom((prev) => Math.min(prev + 0.1, 2));
+    setZoom((prev) => Math.min(prev + 0.1, 2.5));
   };
 
   const handleZoomOut = () => {
-    setZoom((prev) => Math.max(prev - 0.1, 0.5));
+    setZoom((prev) => Math.max(prev - 0.1, 0.3));
   };
 
   const handleCheckUpdates = async () => {
@@ -288,6 +370,9 @@ const StudioClock = () => {
   const resolvedTitleText = titleText.trim().length > 0 ? titleText.trim() : "Studioklocka";
   const showTricasterCountdown = tricasterConfig.enabled && tricasterConfig.showCountdown;
   const showTricasterRecording = tricasterRecordConfig.enabled && tricasterRecordConfig.showIndicator;
+  const isRedStackWatchface = watchface === "red-stack";
+  const showRingLayout = showSecondsRing && !isRedStackWatchface;
+  const effectiveLayoutOffsetX = isRedStackWatchface ? RED_FACE_CENTER_CORRECTION_X : layoutOffsetX;
 
   const tricasterRecordingPillClass = (recording: boolean | null) =>
     `rounded-full px-3 py-1 text-xs uppercase tracking-[0.35em] ${
@@ -305,10 +390,13 @@ const StudioClock = () => {
     () => (
       <div
         className="flex flex-col items-center gap-6 sm:gap-8 transition-transform duration-200"
-        style={{ transform: `scale(${zoom})` }}
+        style={{ transform: `translateX(${effectiveLayoutOffsetX}px) scale(${zoom})`, transformOrigin: "center center" }}
       >
         {showTitle && (
-          <h1 className="text-muted-foreground text-xl sm:text-2xl md:text-3xl font-light tracking-[0.4em] uppercase">
+          <h1
+            className="text-muted-foreground text-xl sm:text-2xl md:text-3xl font-light tracking-[0.4em] uppercase"
+            style={isRedStackWatchface ? { transform: `translateX(${RED_FACE_ADORNMENT_CORRECTION_X}px)` } : undefined}
+          >
             {resolvedTitleText}
           </h1>
         )}
@@ -334,21 +422,8 @@ const StudioClock = () => {
           </div>
         )}
 
-        {showSecondsRing ? (
-          <div className="relative flex w-screen items-center justify-center">
-            {showTricasterCountdown && (
-              <div
-                className="absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
-                style={{ left: `calc(75vw + ${clockSize / 4}px)` }}
-              >
-                <DdrCountdown
-                  label={tricasterConfig.label}
-                  seconds={tricasterCountdown.remainingSeconds}
-                  active={tricasterCountdown.active}
-                  size="lg"
-                />
-              </div>
-            )}
+        {showRingLayout ? (
+          <div className="relative flex w-full items-center justify-center">
             <div className="relative flex items-center justify-center" style={{ width: clockSize, height: clockSize }}>
               <SecondsRing currentSecond={currentSecond} size={clockSize} />
 
@@ -364,37 +439,79 @@ const StudioClock = () => {
               <div className="absolute inset-0 flex items-center justify-center">
                 <DigitalDisplay time={timeString} className={digitalClassName} />
               </div>
+              {showTricasterCountdown && (
+                <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(100% + ${ddrGap}px)` }}>
+                  <DdrCountdown
+                    label={tricasterConfig.label}
+                    seconds={tricasterCountdown.remainingSeconds}
+                    active={tricasterCountdown.active}
+                    size="lg"
+                  />
+                </div>
+              )}
             </div>
           </div>
         ) : (
           <div className="relative flex w-full items-center justify-center">
-            {showTricasterCountdown && (
-              <div className="absolute right-0 top-1/2 -translate-y-1/2">
-                <DdrCountdown
-                  label={tricasterConfig.label}
-                  seconds={tricasterCountdown.remainingSeconds}
-                  active={tricasterCountdown.active}
-                  size="lg"
-                />
+            {isRedStackWatchface ? (
+              <div className="relative inline-flex flex-col items-center gap-4 pb-28">
+                {showLogo && logoDataUrl && (
+                  <img
+                    src={logoDataUrl}
+                    alt="Logo"
+                    className={logoClassName}
+                    style={invertLogo ? { filter: "invert(1)" } : undefined}
+                  />
+                )}
+                <div className="flex w-[8ch] justify-center">
+                  <DigitalDisplay time={timeString} className={`${digitalStandaloneClassName} w-[8ch] text-center`} />
+                </div>
+                {showTricasterCountdown && (
+                  <div
+                    className="absolute left-1/2 top-full mt-3"
+                    style={{ transform: `translate(calc(-50% + ${redFaceDdrOffsetX}px), 0)` }}
+                  >
+                    <DdrCountdown
+                      label={tricasterConfig.label}
+                      seconds={tricasterCountdown.remainingSeconds}
+                      active={tricasterCountdown.active}
+                      size="xl"
+                    />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="relative inline-flex flex-col items-center gap-4">
+                {showLogo && logoDataUrl && (
+                  <img
+                    src={logoDataUrl}
+                    alt="Logo"
+                    className={logoClassName}
+                    style={invertLogo ? { filter: "invert(1)" } : undefined}
+                  />
+                )}
+
+                <DigitalDisplay time={timeString} className={digitalStandaloneClassName} />
+                {showTricasterCountdown && (
+                  <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(100% + ${ddrGap}px)` }}>
+                    <DdrCountdown
+                      label={tricasterConfig.label}
+                      seconds={tricasterCountdown.remainingSeconds}
+                      active={tricasterCountdown.active}
+                      size="lg"
+                    />
+                  </div>
+                )}
               </div>
             )}
-            <div className="flex flex-col items-center gap-4">
-              {showLogo && logoDataUrl && (
-                <img
-                  src={logoDataUrl}
-                  alt="Logo"
-                  className={logoClassName}
-                  style={invertLogo ? { filter: "invert(1)" } : undefined}
-                />
-              )}
-
-              <DigitalDisplay time={timeString} className={digitalStandaloneClassName} />
-            </div>
           </div>
         )}
 
         {showDate && (
-          <div className="text-muted-foreground text-lg sm:text-xl md:text-2xl font-light tracking-wide">
+          <div
+            className="text-muted-foreground text-lg sm:text-xl md:text-2xl font-light tracking-wide"
+            style={isRedStackWatchface ? { transform: `translateX(${RED_FACE_ADORNMENT_CORRECTION_X}px)` } : undefined}
+          >
             {dateString}
           </div>
         )}
@@ -416,6 +533,7 @@ const StudioClock = () => {
       showMicIndicator,
       showDate,
       showLogo,
+      showRingLayout,
       showSecondsRing,
       showStopwatch,
       showTitle,
@@ -427,6 +545,10 @@ const StudioClock = () => {
       tricasterCountdown.active,
       tricasterCountdown.remainingSeconds,
       resolvedTitleText,
+      layoutOffsetX,
+      effectiveLayoutOffsetX,
+      ddrGap,
+      isRedStackWatchface,
       zoom,
     ],
   );
@@ -551,6 +673,7 @@ const StudioClock = () => {
               checked={showSecondsRing}
               onSelect={(event) => event.preventDefault()}
               onCheckedChange={(v) => setShowSecondsRing(v === true)}
+              disabled={isRedStackWatchface}
             >
               <div className="flex items-center gap-2">
                 <Circle className="h-4 w-4" />
@@ -564,7 +687,7 @@ const StudioClock = () => {
                 event.preventDefault();
                 handleZoomOut();
               }}
-              disabled={zoom <= 0.5}
+              disabled={zoom <= 0.3}
               className="flex items-center gap-2"
             >
               <Minus className="h-4 w-4" />
@@ -575,7 +698,7 @@ const StudioClock = () => {
                 event.preventDefault();
                 handleZoomIn();
               }}
-              disabled={zoom >= 2}
+              disabled={zoom >= 2.5}
               className="flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />
@@ -643,7 +766,7 @@ const StudioClock = () => {
           </ErrorBoundary>
         </div>
       ) : (
-        <div className="flex w-full flex-1 items-start justify-center pt-20">
+        <div className="flex w-full flex-1 flex-col items-center justify-start gap-6 pt-20 lg:flex-row lg:items-start lg:justify-center">
           <div className="w-full max-w-xl rounded-xl border border-border/60 bg-card/80 p-6 shadow-sm backdrop-blur">
             <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Settings</div>
             <div className="mt-4 text-lg font-semibold text-foreground">Clock source</div>
@@ -665,6 +788,114 @@ const StudioClock = () => {
             {lastSync && (
               <div className="mt-4 text-xs text-muted-foreground">Last sync: {format(lastSync, "HH:mm:ss")}</div>
             )}
+
+            <div className="mt-8 border-t border-border/60 pt-6">
+              <div className="text-lg font-semibold text-foreground">Watchface</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Choose between the classic ring face and a red stacked face with DDR below the clock.
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant={watchface === "classic" ? "default" : "outline"}
+                  onClick={() => setWatchface("classic")}
+                >
+                  Classic
+                </Button>
+                <Button
+                  type="button"
+                  variant={watchface === "red-stack" ? "default" : "outline"}
+                  onClick={() => setWatchface("red-stack")}
+                >
+                  Red stacked
+                </Button>
+              </div>
+              {isRedStackWatchface && (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  Red stacked hides the seconds ring and places the DDR countdown under the clock.
+                </div>
+              )}
+            </div>
+
+            <div className="mt-8 border-t border-border/60 pt-6">
+              <div className="text-lg font-semibold text-foreground">Layout</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Shift the whole clock composition and control how far the DDR countdown sits from the clock.
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Global zoom ({Math.round(zoom * 100)}%)
+                  <input
+                    type="range"
+                    min={30}
+                    max={250}
+                    step={5}
+                    value={Math.round(zoom * 100)}
+                    onChange={(event) => setZoom(Number(event.target.value) / 100)}
+                    className="w-full"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Horizontal shift ({layoutOffsetX}px)
+                  <input
+                    type="range"
+                    min={-600}
+                    max={600}
+                    step={10}
+                    value={layoutOffsetX}
+                    onChange={(event) => setLayoutOffsetX(Number(event.target.value))}
+                    disabled={isRedStackWatchface}
+                    className="w-full"
+                  />
+                </label>
+              </div>
+              <div className="mt-3">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  DDR spacing ({ddrGap}px)
+                  <input
+                    type="range"
+                    min={0}
+                    max={320}
+                    step={4}
+                    value={ddrGap}
+                    onChange={(event) => setDdrGap(Number(event.target.value))}
+                    disabled={!showTricasterCountdown}
+                    className="w-full"
+                  />
+                </label>
+              </div>
+              {isRedStackWatchface && (
+                <div className="mt-3">
+                  <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                    Red face DDR nudge ({redFaceDdrOffsetX}px)
+                    <input
+                      type="range"
+                      min={-160}
+                      max={160}
+                      step={1}
+                      value={redFaceDdrOffsetX}
+                      onChange={(event) => setRedFaceDdrOffsetX(Number(event.target.value))}
+                      className="w-full"
+                    />
+                  </label>
+                </div>
+              )}
+              <div className="mt-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setZoom(1);
+                    setLayoutOffsetX(0);
+                    setDdrGap(56);
+                    setRedFaceClockOffsetX(RED_FACE_CLOCK_OFFSET_DEFAULT);
+                    setRedFaceDdrOffsetX(RED_FACE_DDR_OFFSET_DEFAULT);
+                  }}
+                >
+                  Reset layout defaults
+                </Button>
+              </div>
+            </div>
 
             <div className="mt-8 border-t border-border/60 pt-6">
               <div className="text-lg font-semibold text-foreground">Title text</div>
@@ -1244,6 +1475,12 @@ const StudioClock = () => {
                 Use shortcut state names (via `/v1/dictionary?key=shortcut_states`). Recording values should be true/false
                 or 1/0.
               </div>
+            </div>
+          </div>
+          <div className="w-full max-w-[720px] rounded-xl border border-border/60 bg-card/60 p-4 shadow-sm backdrop-blur">
+            <div className="mb-3 text-xs uppercase tracking-[0.3em] text-muted-foreground">Live preview</div>
+            <div className="flex min-h-[380px] items-center justify-center overflow-hidden rounded-lg border border-border/40 bg-background/70 p-4">
+              {clockContent}
             </div>
           </div>
         </div>
