@@ -89,6 +89,17 @@ const parseShortcutStates = (message: string) => {
     .filter((entry): entry is { name: string; value: string } => Boolean(entry));
 };
 
+const decodeSocketMessage = async (data: unknown): Promise<string | null> => {
+  if (typeof data === "string") return data;
+  if (data instanceof Blob) return data.text();
+  if (data instanceof ArrayBuffer) return new TextDecoder().decode(data);
+  if (ArrayBuffer.isView(data)) {
+    const view = data as ArrayBufferView;
+    return new TextDecoder().decode(view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength));
+  }
+  return null;
+};
+
 const parseRecordingValue = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -168,15 +179,19 @@ export const useTriCasterRecording = () => {
       };
 
       socket.onmessage = (event) => {
-        if (!active || typeof event.data !== "string") return;
-        const updates = parseShortcutStates(event.data);
-        if (updates.length === 0) return;
-        for (const update of updates) {
-          if (update.name !== stateName) continue;
-          const recording = parseRecordingValue(update.value);
-          if (recording == null) continue;
-          setState((prev) => ({ ...prev, recording, lastUpdate: Date.now() }));
-        }
+        if (!active) return;
+        void (async () => {
+          const message = await decodeSocketMessage(event.data);
+          if (!message) return;
+          const updates = parseShortcutStates(message);
+          if (updates.length === 0) return;
+          for (const update of updates) {
+            if (update.name !== stateName) continue;
+            const recording = parseRecordingValue(update.value);
+            if (recording == null) continue;
+            setState((prev) => ({ ...prev, recording, lastUpdate: Date.now() }));
+          }
+        })();
       };
 
       socket.onerror = () => {

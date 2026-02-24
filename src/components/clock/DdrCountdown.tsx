@@ -28,17 +28,21 @@ const sizeClasses: Record<NonNullable<DdrCountdownProps["size"]>, { label: strin
 const DdrCountdown = ({ label, seconds, active, size = "md", className }: DdrCountdownProps) => {
   const styles = sizeClasses[size];
   const displayValue = seconds != null ? formatDuration(seconds) : "--:--";
+  const isCritical = seconds != null && Math.floor(seconds) <= 10;
 
   return (
     <div
       className={cn(
-        "flex min-w-[120px] flex-col items-center justify-center rounded-xl border border-border/60 bg-card/70 px-3 py-2 text-center shadow-sm backdrop-blur transition-opacity duration-500",
+        "flex min-w-[120px] flex-col items-center justify-center rounded-xl border px-3 py-2 text-center shadow-sm backdrop-blur transition-colors duration-200",
+        isCritical ? "border-red-300 bg-red-700" : "border-border/60 bg-card/70",
         active ? "opacity-100" : "opacity-0 pointer-events-none",
         className,
       )}
     >
-      <div className={cn("uppercase text-muted-foreground", styles.label)}>{label}</div>
-      <div className={cn("mt-1 font-semibold text-foreground tabular-nums", styles.value)}>{displayValue}</div>
+      <div className={cn("uppercase", isCritical ? "text-red-100" : "text-muted-foreground", styles.label)}>{label}</div>
+      <div className={cn("mt-1 font-semibold tabular-nums", isCritical ? "text-white" : "text-foreground", styles.value)}>
+        {displayValue}
+      </div>
     </div>
   );
 };

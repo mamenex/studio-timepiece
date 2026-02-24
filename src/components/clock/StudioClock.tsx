@@ -335,9 +335,12 @@ const StudioClock = () => {
         )}
 
         {showSecondsRing ? (
-          <div className="relative flex w-full items-center justify-center">
+          <div className="relative flex w-screen items-center justify-center">
             {showTricasterCountdown && (
-              <div className="absolute left-0 top-1/2 -translate-y-1/2">
+              <div
+                className="absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `calc(75vw + ${clockSize / 4}px)` }}
+              >
                 <DdrCountdown
                   label={tricasterConfig.label}
                   seconds={tricasterCountdown.remainingSeconds}
@@ -366,7 +369,7 @@ const StudioClock = () => {
         ) : (
           <div className="relative flex w-full items-center justify-center">
             {showTricasterCountdown && (
-              <div className="absolute left-0 top-1/2 -translate-y-1/2">
+              <div className="absolute right-0 top-1/2 -translate-y-1/2">
                 <DdrCountdown
                   label={tricasterConfig.label}
                   seconds={tricasterCountdown.remainingSeconds}
@@ -1106,9 +1109,59 @@ const StudioClock = () => {
                   Use &#123;n&#125; for DDR number. Find state names via `/v1/dictionary?key=shortcut_states`.
                 </div>
               </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Switch
+                  checked={tricasterConfig.useEstimatedCountdown}
+                  onCheckedChange={(value) => setTricasterConfig({ useEstimatedCountdown: value })}
+                  disabled={!tricasterConfig.enabled}
+                />
+                <span className="text-sm text-muted-foreground">Use estimated fallback countdown from DDR play</span>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Play state pattern
+                  <input
+                    value={tricasterConfig.playStatePattern}
+                    onChange={(event) => setTricasterConfig({ playStatePattern: event.target.value })}
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="ddr{n}_play"
+                    disabled={!tricasterConfig.enabled}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  Estimated clip length (seconds)
+                  <input
+                    type="number"
+                    min={1}
+                    value={tricasterConfig.estimatedDurationSeconds}
+                    onChange={(event) =>
+                      setTricasterConfig({ estimatedDurationSeconds: Math.max(1, Number(event.target.value) || 1) })
+                    }
+                    className="rounded-md border border-border/60 bg-transparent px-2 py-2 text-sm text-foreground"
+                    placeholder="30"
+                    disabled={!tricasterConfig.enabled || !tricasterConfig.useEstimatedCountdown}
+                  />
+                </label>
+              </div>
               <div className="mt-2 text-xs text-muted-foreground">
                 Uses TriCaster shortcut state notifications. Ensure the TriCaster API is enabled and accessible on port
                 5951.
+              </div>
+              <div className="mt-3 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                <div>Debug • Active DDR: {tricasterCountdown.activeDdr ?? "--"}</div>
+                <div>Debug • Countdown active: {tricasterCountdown.active ? "yes" : "no"}</div>
+                <div>Debug • Remaining seconds: {tricasterCountdown.remainingSeconds ?? "--"}</div>
+                <div>
+                  Debug • Program tally: {tricasterState.programTally.length > 0 ? tricasterState.programTally.join(" | ") : "--"}
+                </div>
+                <div>
+                  Debug • DDR play states:{" "}
+                  {Object.entries(tricasterState.playingByDdr ?? {}).length > 0
+                    ? Object.entries(tricasterState.playingByDdr)
+                        .map(([ddr, entry]) => `DDR${ddr}:${entry.playing ? "play" : "stop"}`)
+                        .join(" | ")
+                    : "--"}
+                </div>
               </div>
             </div>
 
